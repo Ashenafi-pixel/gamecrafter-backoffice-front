@@ -1,0 +1,422 @@
+import React, { useState, useEffect } from 'react';
+import { Calendar, Download, TrendingUp, TrendingDown, Users, DollarSign, RefreshCw } from 'lucide-react';
+import { useServices } from '../../contexts/ServicesContext';
+import toast from 'react-hot-toast';
+import { RealtimeStats, DailyReportData } from '../../types/analytics';
+
+export const DailyReport: React.FC = () => {
+  const { analyticsSvc } = useServices();
+  const [selectedDate, setSelectedDate] = useState('2024-01-07');
+  const [excludeTestCustomers, setExcludeTestCustomers] = useState(false);
+  const [realtimeStats, setRealtimeStats] = useState<RealtimeStats['data'] | null>(null);
+  const [dailyData, setDailyData] = useState<DailyReportData['data'] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Set the token for analytics API
+  useEffect(() => {
+    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYTVlMTY4ZmItMTY4ZS00MTgzLTg0YzUtZDQ5MDM4Y2UwMGI1IiwiaXNfdmVyaWZpZWQiOmZhbHNlLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwiZXhwIjoxNzU5MjExNTAyLCJpYXQiOjE3NTkxMjUxMDIsImlzcyI6InR1Y2FuYml0Iiwic3ViIjoiYTVlMTY4ZmItMTY4ZS00MTgzLTg0YzUtZDQ5MDM4Y2UwMGI1In0.gzyyL55i2OFVEtnaRBJ9632vomVt-iSh3Lel2ZsF3Lg";
+    localStorage.setItem('access_token', token);
+  }, []);
+
+  // Fetch real-time stats
+  const fetchRealtimeStats = async () => {
+    try {
+      const response = await analyticsSvc.get<RealtimeStats>('/analytics/realtime/stats');
+      if (response.success && response.data) {
+        setRealtimeStats(response.data.data);
+        setLastUpdated(new Date());
+        toast.success('Real-time stats updated');
+      }
+    } catch (error: any) {
+      toast.error('Failed to fetch real-time stats: ' + error.message);
+      console.error('Realtime stats error:', error);
+      // Set mock real-time data on error
+      setRealtimeStats({
+        timestamp: new Date().toISOString(),
+        total_transactions: 1247,
+        deposits_count: 89,
+        withdrawals_count: 67,
+        bets_count: 2341,
+        wins_count: 1567,
+        total_deposits: "45670",
+        total_withdrawals: "23450",
+        total_bets: "98700",
+        total_wins: "72340",
+        net_revenue: "12340",
+        active_users: 423,
+        active_games: 187
+      });
+    }
+  };
+
+  // Fetch daily report
+  const fetchDailyReport = async (date: string) => {
+    setLoading(true);
+    try {
+      const response = await analyticsSvc.get<DailyReportData>(`/analytics/reports/daily?date=${date}`);
+      if (response.success && response.data) {
+        setDailyData(response.data.data);
+        toast.success(`Daily report loaded for ${date}`);
+      }
+    } catch (error: any) {
+      toast.error('Failed to fetch daily report: ' + error.message);
+      console.error('Daily report error:', error);
+      // Fall back to null - use mock data for display
+      setDailyData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRealtimeStats();
+    fetchDailyReport(selectedDate);
+  }, [selectedDate]);
+
+  // Refresh data
+  const handleRefresh = () => {
+    fetchRealtimeStats();
+    fetchDailyReport(selectedDate);
+  };
+
+  // Daily data display - show single day from API
+  const displayData = dailyData ? 
+    {
+      date: '2024-01-01',
+      nrcs: 247,
+      ndcs: 189,
+      depositingCustomers: 156,
+      deposits: 234,
+      depositAmount: 567800,
+      withdrawingCustomers: 89,
+      withdrawals: 145,
+      withdrawalAmount: 234500,
+      activeCustomers: 2847,
+      bets: 45230,
+      betAmount: 892450,
+      ggrAmount: 47820,
+      bonusesConverted: 23,
+      bonusConvertedAmount: 12450,
+      ngrAmount: 35370
+    },
+    {
+      date: '2024-01-02',
+      nrcs: 289,
+      ndcs: 234,
+      depositingCustomers: 198,
+      deposits: 287,
+      depositAmount: 678900,
+      withdrawingCustomers: 112,
+      withdrawals: 167,
+      withdrawalAmount: 289600,
+      activeCustomers: 3234,
+      bets: 52180,
+      betAmount: 1045600,
+      ggrAmount: 56230,
+      bonusesConverted: 31,
+      bonusConvertedAmount: 18750,
+      ngrAmount: 37480
+    },
+    {
+      date: '2024-01-03',
+      nrcs: 198,
+      ndcs: 167,
+      depositingCustomers: 134,
+      deposits: 198,
+      depositAmount: 456700,
+      withdrawingCustomers: 78,
+      withdrawals: 123,
+      withdrawalAmount: 198400,
+      activeCustomers: 2567,
+      bets: 38920,
+      betAmount: 756800,
+      ggrAmount: 41290,
+      bonusesConverted: 18,
+      bonusConvertedAmount: 9850,
+      ngrAmount: 31440
+    },
+    {
+      date: '2024-01-04',
+      nrcs: 334,
+      ndcs: 278,
+      depositingCustomers: 234,
+      deposits: 345,
+      depositAmount: 789600,
+      withdrawingCustomers: 134,
+      withdrawals: 198,
+      withdrawalAmount: 345700,
+      activeCustomers: 3456,
+      bets: 61450,
+      betAmount: 1234500,
+      ggrAmount: 67890,
+      bonusesConverted: 42,
+      bonusConvertedAmount: 24600,
+      ngrAmount: 43290
+    },
+    {
+      date: '2024-01-05',
+      nrcs: 412,
+      ndcs: 356,
+      depositingCustomers: 289,
+      deposits: 423,
+      depositAmount: 934500,
+      withdrawingCustomers: 167,
+      withdrawals: 234,
+      withdrawalAmount: 456800,
+      activeCustomers: 4123,
+      bets: 78920,
+      betAmount: 1567800,
+      ggrAmount: 89450,
+      bonusesConverted: 56,
+      bonusConvertedAmount: 32100,
+      ngrAmount: 57350
+    },
+    {
+      date: '2024-01-06',
+      nrcs: 378,
+      ndcs: 298,
+      depositingCustomers: 245,
+      deposits: 367,
+      depositAmount: 823400,
+      withdrawingCustomers: 145,
+      withdrawals: 212,
+      withdrawalAmount: 398600,
+      activeCustomers: 3789,
+      bets: 69870,
+      betAmount: 1398700,
+      ggrAmount: 78920,
+      bonusesConverted: 48,
+      bonusConvertedAmount: 28900,
+      ngrAmount: 50020
+    },
+    {
+      date: '2024-01-07',
+      nrcs: 445,
+      ndcs: 389,
+      depositingCustomers: 312,
+      deposits: 456,
+      depositAmount: 1045600,
+      withdrawingCustomers: 189,
+      withdrawals: 267,
+      withdrawalAmount: 523400,
+      activeCustomers: 4234,
+      bets: 82340,
+      betAmount: 1678900,
+      ggrAmount: 94560,
+      bonusesConverted: 67,
+      bonusConvertedAmount: 38750,
+      ngrAmount: 55810
+    }
+  ];
+
+  // Calculate summary metrics - use mock data since API returns single day object, not array
+  const dataToUse = dailyData ? [dailyData] : null; // Use actual API data
+  const totalMetrics = dataToUse.reduce((acc, day) => ({
+    nrcs: acc.nrcs + day.nrcs,
+    ndcs: acc.ndcs + day.ndcs,
+    depositingCustomers: acc.depositingCustomers + day.depositingCustomers,
+    deposits: acc.deposits + day.deposits,
+    depositAmount: acc.depositAmount + day.depositAmount,
+    withdrawingCustomers: acc.withdrawingCustomers + day.withdrawingCustomers,
+    withdrawals: acc.withdrawals + day.withdrawals,
+    withdrawalAmount: acc.withdrawalAmount + day.withdrawalAmount,
+    activeCustomers: acc.activeCustomers + day.activeCustomers,
+    bets: acc.bets + day.bets,
+    betAmount: acc.betAmount + day.betAmount,
+    ggrAmount: acc.ggrAmount + day.ggrAmount,
+    bonusesConverted: acc.bonusesConverted + day.bonusesConverted,
+    bonusConvertedAmount: acc.bonusConvertedAmount + day.bonusConvertedAmount,
+    ngrAmount: acc.ngrAmount + day.ngrAmount
+  }), {
+    nrcs: 0,
+    ndcs: 0,
+    depositingCustomers: 0,
+    deposits: 0,
+    depositAmount: 0,
+    withdrawingCustomers: 0,
+    withdrawals: 0,
+    withdrawalAmount: 0,
+    activeCustomers: 0,
+    bets: 0,
+    betAmount: 0,
+    ggrAmount: 0,
+    bonusesConverted: 0,
+    bonusConvertedAmount: 0,
+    ngrAmount: 0
+  });
+
+  const averageMetrics = {
+    nrcs: Math.round(totalMetrics.nrcs / dataToUse.length),
+    ndcs: Math.round(totalMetrics.ndcs / dataToUse.length),
+    depositingCustomers: Math.round(totalMetrics.depositingCustomers / dataToUse.length),
+    deposits: Math.round(totalMetrics.deposits / dataToUse.length),
+    depositAmount: Math.round(totalMetrics.depositAmount / dataToUse.length),
+    withdrawingCustomers: Math.round(totalMetrics.withdrawingCustomers / dataToUse.length),
+    withdrawals: Math.round(totalMetrics.withdrawals / dataToUse.length),
+    withdrawalAmount: Math.round(totalMetrics.withdrawalAmount / dataToUse.length),
+    activeCustomers: Math.round(totalMetrics.activeCustomers / dataToUse.length),
+    bets: Math.round(totalMetrics.bets / dataToUse.length),
+    betAmount: Math.round(totalMetrics.betAmount / dataToUse.length),
+    ggrAmount: Math.round(totalMetrics.ggrAmount / dataToUse.length),
+    bonusesConverted: Math.round(totalMetrics.bonusesConverted / dataToUse.length),
+    bonusConvertedAmount: Math.round(totalMetrics.bonusConvertedAmount / dataToUse.length),
+    ngrAmount: Math.round(totalMetrics.ngrAmount / dataToUse.length)
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Daily Report</h1>
+          <p className="text-gray-400 mt-1">Comprehensive daily performance metrics</p>
+          {lastUpdated && (
+            <p className="text-xs text-gray-500 mt-1">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center space-x-3">
+          <label className="flex items-center space-x-2 text-white">
+            <input
+              type="checkbox"
+              checked={excludeTestCustomers}
+              onChange={(e) => setExcludeTestCustomers(e.target.checked)}
+              className="rounded border-gray-500"
+            />
+            <span className="text-sm">Exclude Test Customers</span>
+          </label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2"
+          />
+          <select className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2">
+            <option>Last 7 days</option>
+            <option>Last 30 days</option>
+            <option>Last 3 months</option>
+            <option>Custom Range</option>
+          </select>
+          <button 
+            onClick={handleRefresh}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+          <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+            <Download className="h-4 w-4" />
+            <span>Export CSV</span>
+          </button>
+        </div>
+      </div>
+
+
+      {/* Detailed Daily Table */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-white">Daily Performance Breakdown</h3>
+          <div className="text-sm text-gray-400">
+            Showing {dataToUse.length} days of data
+          </div>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left py-4 px-4 text-gray-400 font-medium">Date</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">NRCs</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">NDCs</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Depositing Customers</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Deposits</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">Deposit Amount ($)</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Withdrawing Customers</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Withdrawals</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">Withdrawal Amount ($)</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">Active Customers</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Bets</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">Bet Amount ($)</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">GGR ($)</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium"># Bonuses Converted</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">Bonus Converted ($)</th>
+                <th className="text-right py-4 px-4 text-gray-400 font-medium">NGR ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dataToUse.map((day, index) => (
+                <tr key={index} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                  <td className="py-4 px-4 text-white font-medium">
+                    {new Date(day.date).toLocaleDateString('en-US', { 
+                      weekday: 'short',
+                      month: 'short', 
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </td>
+                  <td className="py-4 px-4 text-blue-400 text-right font-medium">{day.nrcs.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-green-400 text-right font-medium">{day.ndcs.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.depositingCustomers.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.deposits.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-green-400 text-right font-medium">${day.depositAmount.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.withdrawingCustomers.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.withdrawals.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-red-400 text-right font-medium">${day.withdrawalAmount.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-purple-400 text-right font-medium">{day.activeCustomers.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.bets.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right font-medium">${day.betAmount.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-purple-400 text-right font-medium">${day.ggrAmount.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-white text-right">{day.bonusesConverted.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-orange-400 text-right font-medium">${day.bonusConvertedAmount.toLocaleString()}</td>
+                  <td className="py-4 px-4 text-yellow-400 text-right font-bold">${day.ngrAmount.toLocaleString()}</td>
+                </tr>
+              ))}
+              
+              {/* Totals Row */}
+              <tr className="border-t-2 border-gray-600 bg-gray-700/50">
+                <td className="py-4 px-4 text-white font-bold">TOTALS</td>
+                <td className="py-4 px-4 text-blue-400 text-right font-bold">{totalMetrics.nrcs.toLocaleString()}</td>
+                <td className="py-4 px-4 text-green-400 text-right font-bold">{totalMetrics.ndcs.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.depositingCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.deposits.toLocaleString()}</td>
+                <td className="py-4 px-4 text-green-400 text-right font-bold">${totalMetrics.depositAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.withdrawingCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.withdrawals.toLocaleString()}</td>
+                <td className="py-4 px-4 text-red-400 text-right font-bold">${totalMetrics.withdrawalAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-purple-400 text-right font-bold">{totalMetrics.activeCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.bets.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">${totalMetrics.betAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-purple-400 text-right font-bold">${totalMetrics.ggrAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-white text-right font-bold">{totalMetrics.bonusesConverted.toLocaleString()}</td>
+                <td className="py-4 px-4 text-orange-400 text-right font-bold">${totalMetrics.bonusConvertedAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-yellow-400 text-right font-bold">${totalMetrics.ngrAmount.toLocaleString()}</td>
+              </tr>
+              
+              {/* Averages Row */}
+              <tr className="bg-gray-700/30">
+                <td className="py-4 px-4 text-gray-300 font-medium">AVERAGES</td>
+                <td className="py-4 px-4 text-blue-300 text-right font-medium">{averageMetrics.nrcs.toLocaleString()}</td>
+                <td className="py-4 px-4 text-green-300 text-right font-medium">{averageMetrics.ndcs.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.depositingCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.deposits.toLocaleString()}</td>
+                <td className="py-4 px-4 text-green-300 text-right font-medium">${averageMetrics.depositAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.withdrawingCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.withdrawals.toLocaleString()}</td>
+                <td className="py-4 px-4 text-red-300 text-right font-medium">${averageMetrics.withdrawalAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-purple-300 text-right font-medium">{averageMetrics.activeCustomers.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.bets.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">${averageMetrics.betAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-purple-300 text-right font-medium">${averageMetrics.ggrAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-gray-300 text-right font-medium">{averageMetrics.bonusesConverted.toLocaleString()}</td>
+                <td className="py-4 px-4 text-orange-300 text-right font-medium">${averageMetrics.bonusConvertedAmount.toLocaleString()}</td>
+                <td className="py-4 px-4 text-yellow-300 text-right font-medium">${averageMetrics.ngrAmount.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
