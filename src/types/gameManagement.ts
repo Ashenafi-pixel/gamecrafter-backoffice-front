@@ -25,12 +25,12 @@ export interface Game {
 export interface CreateGameRequest {
   name: string;
   status: GameStatus;
-  photo: string;
+  photo?: string;
   enabled: boolean;
-  game_id: string;
-  internal_name: string;
-  integration_partner: string;
-  provider: string;
+  game_id?: string;
+  internal_name?: string;
+  integration_partner?: string;
+  provider_id: string;
 }
 
 export interface UpdateGameRequest {
@@ -41,20 +41,17 @@ export interface UpdateGameRequest {
   game_id?: string;
   internal_name?: string;
   integration_partner?: string;
-  provider?: string;
+  provider_id?: string;
 }
 
+// Payload returned in the API `data` field for game list endpoints
 export interface GameListResponse {
-  success: boolean;
-  data: {
-    games: Game[];
-    total_count: number;
-    total?: number; // fallback
-    page: number;
-    per_page: number;
-    total_pages: number;
-  };
-  message: string;
+  games: Game[];
+  total_count: number;
+  total?: number; // fallback for older responses
+  page: number;
+  per_page: number;
+  total_pages: number;
 }
 
 export interface GameFilters {
