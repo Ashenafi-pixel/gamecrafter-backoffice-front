@@ -23,6 +23,12 @@ import {
   Filter,
   Smartphone,
   RefreshCw,
+  Lock,
+  UserCog,
+  FileCheck,
+  ArrowUpRight,
+  ArrowDownRight,
+  Zap,
 } from "lucide-react";
 import { useServices } from "../../contexts/ServicesContext";
 import {
@@ -36,7 +42,8 @@ import {
 import { toast } from "react-hot-toast";
 import { TwoFactorAuthSettings } from "../settings/TwoFactorSettings";
 import { PageAccessManagement } from "./PageAccessManagement";
-import { brandService, Brand } from "../../services/brandService";
+import { Brand } from "../../services/brandService";
+import { getMockBrands } from "../../mocks/brands";
 
 interface IPRule {
   id: string;
@@ -137,10 +144,16 @@ export const AccessControl: React.FC = () => {
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
   const [selectedSecurityBrandId, setSelectedSecurityBrandId] =
     useState<string>("");
-  // Brands (used by Security Settings brand dropdown + brand_id query param)
-  // Must be declared before ensureSecurityBrandId() references it.
-  const [brands, setBrands] = useState<Brand[]>([]);
+  // Brands: demo data from Brands sidebar (no API)
+  const [brands, setBrands] = useState<Brand[]>(() => getMockBrands());
   const [loadingBrands, setLoadingBrands] = useState(false);
+
+  // Default selected brand for Security tab when none selected
+  useEffect(() => {
+    if (!selectedSecurityBrandId && brands.length > 0) {
+      setSelectedSecurityBrandId(brands[0].id);
+    }
+  }, [brands.length, selectedSecurityBrandId]);
 
   // KYC Settings state (from kyc_settings table)
   const [kycSettingsList, setKycSettingsList] = useState<any[]>([]);
@@ -160,38 +173,20 @@ export const AccessControl: React.FC = () => {
   const ensureSecurityBrandId = useCallback(async (): Promise<
     string | null
   > => {
-    // Prefer currently selected brand
     if (selectedSecurityBrandId) return selectedSecurityBrandId;
-
-    // If brands are already loaded, pick the first as default
     if (brands.length > 0) {
       const first = brands[0].id;
       setSelectedSecurityBrandId(first);
       return first;
     }
-
-    // Load brands (used elsewhere in this component too)
-    try {
-      setLoadingBrands(true);
-      const response = await brandService.getBrands({
-        page: 1,
-        "per-page": 100,
-      });
-      const list =
-        response.success && response.data ? response.data.brands || [] : [];
+    const list = getMockBrands();
       setBrands(list);
       if (list.length > 0) {
         setSelectedSecurityBrandId(list[0].id);
         return list[0].id;
       }
       return null;
-    } catch (err) {
-      console.error("Failed to load brands for security settings:", err);
-      return null;
-    } finally {
-      setLoadingBrands(false);
-    }
-  }, [brands, selectedSecurityBrandId]);
+  }, [brands.length, selectedSecurityBrandId]);
 
   const loadSecuritySettings = useCallback(async () => {
     try {
@@ -1074,29 +1069,10 @@ export const AccessControl: React.FC = () => {
     }
   };
 
-  // Fetch brands and refresh admin list when create modal opens
+  // When create modal opens: refresh admin list and clear validation (brands already from demo data)
   useEffect(() => {
     if (showCreateModal) {
-      const fetchBrands = async () => {
-        try {
-          setLoadingBrands(true);
-          const response = await brandService.getBrands({
-            page: 1,
-            "per-page": 100,
-          });
-          if (response.success && response.data) {
-            setBrands(response.data.brands || []);
-          }
-        } catch (error) {
-          console.error("Error fetching brands:", error);
-        } finally {
-          setLoadingBrands(false);
-        }
-      };
-      fetchBrands();
-      // Refresh admin list to ensure we have the latest data for validation
       fetchAdmins();
-      // Clear validation errors when modal opens
       setValidationErrors({});
     }
   }, [showCreateModal]);
@@ -1809,163 +1785,110 @@ export const AccessControl: React.FC = () => {
     }
   }, [activeTab]);
 
+  const sidebarSections = [
+    {
+      title: "Security & login",
+      tabs: [
+        { id: "security", label: "Security & login", icon: Lock },
+        { id: "twofactor", label: "Two-factor auth (2FA)", icon: Smartphone },
+      ],
+    },
+    {
+      title: "Roles & permissions",
+      tabs: [
+        { id: "rbac-roles", label: "Roles", icon: Shield },
+        { id: "rbac-permissions", label: "Permissions", icon: Key },
+        { id: "rbac-assignments", label: "Assign roles to users", icon: Users },
+        { id: "page-access", label: "Page access", icon: Globe },
+      ],
+    },
+    {
+      title: "Users & compliance",
+      tabs: [
+        { id: "admin-users", label: "Admin users", icon: UserCog },
+        { id: "kyc-settings", label: "KYC configuration", icon: FileCheck },
+      ],
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-[1600px]">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80">
+            <Shield className="h-7 w-7 text-red-500" />
+          </div>
         <div>
           <h1 className="text-2xl font-bold text-white">
-            Back Office Settings
+              Access control
           </h1>
-          <p className="text-gray-400 mt-1">
-            Manage security, authentication, roles, permissions, and admin users
+            <p className="text-slate-400 text-sm mt-0.5">
+              Security, roles, permissions, and admin users
           </p>
         </div>
-        <div className="flex items-center space-x-3">
+        </div>
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setShowRoleModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium text-sm transition-all shadow-lg shadow-red-500/20"
           >
             <Plus className="h-4 w-4" />
-            <span>Create Role</span>
+            Create role
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg">
-        <div className="border-b border-gray-700">
-          <nav className="flex space-x-8 px-6">
+      {/* Main card: vertical sidebar + content */}
+      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/95 to-slate-950/95 overflow-hidden flex flex-col md:flex-row min-h-[480px] backdrop-blur-sm">
+        <aside className="w-full md:w-56 lg:w-64 border-b md:border-b-0 md:border-r border-slate-700/80 bg-slate-800/30">
+          <nav className="p-3 space-y-6" aria-label="Access control sections">
+            {sidebarSections.map((section) => (
+              <div key={section.title}>
+                <h2 className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {section.title}
+                </h2>
+                <div className="space-y-0.5">
+                  {section.tabs.map(({ id, label, icon: Icon }) => (
             <button
+                      key={id}
               onClick={() => {
-                setActiveTab("security");
-                setSearchParams({ tab: "security" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "security"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Shield className="h-4 w-4 inline mr-2" />
-              Security
+                        setActiveTab(id);
+                        setSearchParams({ tab: id });
+                      }}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                        activeTab === id
+                          ? "bg-red-500/15 text-red-500"
+                          : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
             </button>
-            <button
-              onClick={() => {
-                setActiveTab("twofactor");
-                setSearchParams({ tab: "twofactor" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "twofactor"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Smartphone className="h-4 w-4 inline mr-2" />
-              Two-Factor Auth
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("rbac-roles");
-                setSearchParams({ tab: "rbac-roles" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "rbac-roles"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Shield className="h-4 w-4 inline mr-2" />
-              Roles & Permissions
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("rbac-permissions");
-                setSearchParams({ tab: "rbac-permissions" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "rbac-permissions"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Key className="h-4 w-4 inline mr-2" />
-              All Permissions
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("admin-users");
-                setSearchParams({ tab: "admin-users" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "admin-users"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Shield className="h-4 w-4 inline mr-2" />
-              Users
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("rbac-assignments");
-                setSearchParams({ tab: "rbac-assignments" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "rbac-assignments"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Users className="h-4 w-4 inline mr-2" />
-              User Assignments
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("kyc-settings");
-                setSearchParams({ tab: "kyc-settings" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "kyc-settings"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Shield className="h-4 w-4 inline mr-2" />
-              KYC Settings
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab("page-access");
-                setSearchParams({ tab: "page-access" });
-              }}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "page-access"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <Globe className="h-4 w-4 inline mr-2" />
-              Page Access
-            </button>
-          </nav>
+                  ))}
         </div>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
-        <div className="p-6">
+        <div className="flex-1 p-6 md:p-8 overflow-auto">
           {activeTab === "security" && (
             <div className="space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Security Settings
+              <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-6 py-4 border-b border-slate-700/80">
+                  <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                    Security & login
                 </h3>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-400">Brand:</span>
+                    <span className="text-sm text-slate-400">Brand</span>
                   <select
                     value={selectedSecurityBrandId || ""}
                     onChange={(e) => setSelectedSecurityBrandId(e.target.value)}
                     disabled={
                       loadingBrands || isLoadingSecurity || isSavingSecurity
                     }
-                    className="bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 min-w-[220px] disabled:opacity-50"
+                      className="bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 min-w-[220px] disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   >
                     {brands.length === 0 && (
                       <option value="" disabled>
@@ -1981,20 +1904,20 @@ export const AccessControl: React.FC = () => {
                   <button
                     onClick={loadSecuritySettings}
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                      className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors disabled:opacity-50"
                     title="Refresh"
                   >
                     <RefreshCw
-                      className={`h-4 w-4 ${isLoadingSecurity ? "animate-spin" : ""}`}
+                        className={`h-5 w-5 ${isLoadingSecurity ? "animate-spin" : ""}`}
                     />
-                    <span className="text-sm">Refresh</span>
                   </button>
                 </div>
               </div>
+                <div className="p-4 md:p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Session Timeout (minutes)
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Session timeout (minutes)
                   </label>
                   <input
                     type="number"
@@ -2006,12 +1929,12 @@ export const AccessControl: React.FC = () => {
                       )
                     }
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Max Login Attempts
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Max login attempts
                   </label>
                   <input
                     type="number"
@@ -2023,12 +1946,12 @@ export const AccessControl: React.FC = () => {
                       )
                     }
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Lockout Duration (minutes)
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Lockout duration (minutes)
                   </label>
                   <input
                     type="number"
@@ -2040,12 +1963,12 @@ export const AccessControl: React.FC = () => {
                       )
                     }
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Password Min Length
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Password min length
                   </label>
                   <input
                     type="number"
@@ -2057,12 +1980,12 @@ export const AccessControl: React.FC = () => {
                       )
                     }
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Rate Limit (requests/minute)
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Rate limit (requests/minute)
                   </label>
                   <input
                     type="number"
@@ -2074,16 +1997,16 @@ export const AccessControl: React.FC = () => {
                       )
                     }
                     disabled={isLoadingSecurity || isSavingSecurity}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
                 </div>
               </div>
-              <div className="space-y-4">
-                <h4 className="text-white font-medium">
-                  Security Features (for site settings)
+              <div className="space-y-4 pt-2">
+                <h4 className="text-slate-300 font-medium text-sm uppercase tracking-wider">
+                  Security features
                 </h4>
                 <div className="space-y-3">
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={securitySettings.twoFactorRequired}
@@ -2094,13 +2017,13 @@ export const AccessControl: React.FC = () => {
                         )
                       }
                       disabled={isLoadingSecurity || isSavingSecurity}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">
-                      Require Two-Factor Authentication
+                    <span className="text-slate-200">
+                      Require two-factor authentication
                     </span>
                   </label>
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={securitySettings.passwordRequireSpecial}
@@ -2111,13 +2034,13 @@ export const AccessControl: React.FC = () => {
                         )
                       }
                       disabled={isLoadingSecurity || isSavingSecurity}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">
-                      Require Special Characters in Password
+                    <span className="text-slate-200">
+                      Require special characters in password
                     </span>
                   </label>
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={securitySettings.ipWhitelistEnabled}
@@ -2128,11 +2051,11 @@ export const AccessControl: React.FC = () => {
                         )
                       }
                       disabled={isLoadingSecurity || isSavingSecurity}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">Enable IP Whitelisting</span>
+                    <span className="text-slate-200">Enable IP whitelisting</span>
                   </label>
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={securitySettings.rateLimitEnabled}
@@ -2143,72 +2066,79 @@ export const AccessControl: React.FC = () => {
                         )
                       }
                       disabled={isLoadingSecurity || isSavingSecurity}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">Enable Rate Limiting</span>
+                    <span className="text-slate-200">Enable rate limiting</span>
                   </label>
                 </div>
               </div>
-              <div className="flex justify-end mt-6">
+              <div className="flex justify-end pt-4 border-t border-slate-700/80">
                 <button
                   onClick={saveSecuritySettings}
                   disabled={isLoadingSecurity || isSavingSecurity}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium disabled:opacity-50 transition-all shadow-lg shadow-red-500/20 inline-flex items-center gap-2"
                 >
                   {isSavingSecurity && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                   )}
-                  <span>
-                    {isSavingSecurity ? "Saving..." : "Save Security Settings"}
-                  </span>
+                  {isSavingSecurity ? "Saving..." : "Save security settings"}
                 </button>
+              </div>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === "twofactor" && (
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="p-4 md:p-6">
             <TwoFactorAuthSettings
               userEmail="admin@tucanbit.com"
               userPhone="+1234567890"
             />
+              </div>
+            </div>
           )}
 
           {/* RBAC Roles Tab */}
 
           {activeTab === "rbac-roles" && (
             <div className="space-y-6">
-              {/* Search Bar */}
-              <div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
+                  <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                    Roles
+                  </h3>
+                  <div className="relative max-w-sm w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search roles..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg pl-10 pr-4 py-2"
+                      className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                   />
                 </div>
               </div>
-
+                <div className="p-4 md:p-6">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto"></div>
-                  <p className="text-gray-400 mt-2">Loading roles...</p>
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-red-500 border-t-transparent" />
+                  <p className="text-slate-400 mt-3 text-sm">Loading roles...</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {filteredRoles.map((role) => (
                     <div
                       key={role.id}
-                      className="bg-gray-700 border border-gray-600 rounded-lg"
+                      className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm"
                     >
                       <div className="p-4">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center gap-3">
                             <button
                               onClick={() => toggleRoleExpansion(role.id)}
-                              className="text-gray-400 hover:text-white"
+                              className="text-slate-400 hover:text-white p-0.5 transition-colors"
                             >
                               {expandedRoles.has(role.id) ? (
                                 <ChevronDown className="h-4 w-4" />
@@ -2216,26 +2146,27 @@ export const AccessControl: React.FC = () => {
                                 <ChevronRight className="h-4 w-4" />
                               )}
                             </button>
-                            <Shield className="h-5 w-5 text-purple-500" />
+                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/50">
+                              <Shield className="h-5 w-5 text-red-500" />
+                            </div>
                             <div>
                               <h3 className="text-white font-medium">
                                 {role.name}
                               </h3>
                               {role.description && (
-                                <p className="text-gray-400 text-sm">
+                                <p className="text-slate-400 text-sm mt-0.5">
                                   {role.description}
                                 </p>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-400 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400 text-sm">
                               {role.permissions?.length || 0} permissions
                             </span>
                             <button
                               onClick={async () => {
                                 setEditingRole(role);
-                                // Initialize with permission IDs + saved values/limits (if backend provides them)
                                 setRoleForm({
                                   name: role.name,
                                   description: role.description || "",
@@ -2255,13 +2186,15 @@ export const AccessControl: React.FC = () => {
                                 setPermissionSearchTerm("");
                                 setShowPermissionModal(true);
                               }}
-                              className="text-blue-400 hover:text-blue-300 p-1"
+                              className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                              title="Edit role"
                             >
                               <Edit2 className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteRole(role.id)}
-                              className="text-red-400 hover:text-red-300 p-1"
+                              className="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                              title="Delete role"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -2270,28 +2203,28 @@ export const AccessControl: React.FC = () => {
                       </div>
 
                       {expandedRoles.has(role.id) && (
-                        <div className="border-t border-gray-600 p-4 bg-gray-600/30">
-                          <h4 className="text-white font-medium mb-3">
+                        <div className="border-t border-slate-700/80 p-4 bg-slate-800/30">
+                          <h4 className="text-slate-300 font-medium mb-3 text-sm uppercase tracking-wider">
                             Permissions
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                             {role.permissions?.map((permission) => (
                               <div
                                 key={permission.id}
-                                className="bg-gray-600 rounded px-3 py-2"
+                                className="bg-slate-950/60 border border-slate-700/80 rounded-xl px-3 py-2"
                               >
-                                <div className="flex items-center space-x-2">
-                                  <Key className="h-3 w-3 text-blue-400" />
+                                <div className="flex items-center gap-2">
+                                  <Key className="h-3 w-3 text-red-500 shrink-0" />
                                   <span className="text-white text-sm">
                                     {permission.name}
                                   </span>
                                 </div>
-                                <p className="text-gray-400 text-xs mt-1">
+                                <p className="text-slate-400 text-xs mt-1">
                                   {permission.description}
                                 </p>
                               </div>
                             )) || (
-                              <p className="text-gray-400 text-sm">
+                              <p className="text-slate-400 text-sm">
                                 No permissions assigned
                               </p>
                             )}
@@ -2302,15 +2235,18 @@ export const AccessControl: React.FC = () => {
                   ))}
                 </div>
               )}
+                </div>
+              </div>
             </div>
           )}
 
           {/* RBAC Permissions Tab */}
           {activeTab === "rbac-permissions" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">
-                  Permissions Management
+              <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
+                  <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                    Permissions
                 </h3>
                 <button
                   onClick={() => {
@@ -2322,15 +2258,15 @@ export const AccessControl: React.FC = () => {
                     });
                     setShowPermissionManagementModal(true);
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium flex items-center gap-2 shadow-lg shadow-red-500/20"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Add Permission</span>
+                    Add permission
                 </button>
               </div>
-
+                <div className="p-4 md:p-6">
               {/* Search and Bulk Actions Bar */}
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+              <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-4 mb-4">
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                   {/* Search */}
                   <div className="flex-1 w-full md:w-auto">
@@ -2594,7 +2530,7 @@ export const AccessControl: React.FC = () => {
                     </tbody>
                   </table>
                   {getFilteredPermissions().length === 0 && (
-                    <div className="text-center py-12 text-gray-400">
+                    <div className="text-center py-12 text-slate-400 text-sm">
                       {permissionSearchQuery
                         ? "No permissions found matching your search"
                         : "No permissions available"}
@@ -2602,33 +2538,34 @@ export const AccessControl: React.FC = () => {
                   )}
                 </div>
               </div>
+                </div>
+              </div>
             </div>
           )}
 
           {/* RBAC Assignments Tab */}
           {activeTab === "rbac-assignments" && (
-            <div className="space-y-4">
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 text-gray-500 mx-auto mb-4" />
-                <h3 className="text-white font-medium mb-2">
-                  Admin User Role Assignments
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="p-8 text-center">
+                <div className="inline-flex p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 mb-4">
+                  <Users className="h-12 w-12 text-red-500" />
+                </div>
+                <h3 className="text-white font-medium text-lg mb-2">
+                  Assign roles to users
                 </h3>
-                <p className="text-gray-400 mb-4">
-                  Manage role assignments for admin users only. Regular players
-                  cannot be assigned roles.
+                <p className="text-slate-400 mb-4 max-w-md mx-auto">
+                  Manage role assignments for admin users only. Regular players cannot be assigned roles.
                 </p>
-                <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
-                  <p className="text-blue-300 text-sm">
-                    <strong>Note:</strong> Only users with admin privileges can
-                    be assigned roles. This ensures proper access control and
-                    security.
+                <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-4 mb-6 max-w-lg mx-auto">
+                  <p className="text-slate-300 text-sm">
+                    <strong className="text-white">Note:</strong> Only users with admin privileges can be assigned roles. This ensures proper access control and security.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowAssignmentModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium transition-all shadow-lg shadow-red-500/20"
                 >
-                  Assign Role to Admin User
+                  Assign role to admin user
                 </button>
               </div>
             </div>
@@ -2637,32 +2574,32 @@ export const AccessControl: React.FC = () => {
           {/* KYC Settings Tab */}
           {activeTab === "kyc-settings" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">
-                  KYC Settings
+              <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
+                  <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                    KYC configuration
                 </h3>
                 <button
                   onClick={loadKycSettingsList}
                   disabled={isLoadingKycSettings}
-                  className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50 text-sm"
+                    className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors disabled:opacity-50"
+                    title="Refresh"
                 >
                   <RefreshCw
-                    className={`h-4 w-4 ${isLoadingKycSettings ? "animate-spin" : ""}`}
+                      className={`h-5 w-5 ${isLoadingKycSettings ? "animate-spin" : ""}`}
                   />
-                  <span>Refresh</span>
                 </button>
               </div>
-
-              {/* Display KYC Settings from kyc_settings table */}
+                <div className="p-4 md:p-6">
               {isLoadingKycSettings ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
-                  <span className="ml-3 text-gray-400">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-red-500 border-t-transparent" />
+                  <span className="ml-3 text-slate-400 text-sm">
                     Loading KYC settings...
                   </span>
                 </div>
               ) : kycSettingsList.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-slate-400 text-sm">
                   No KYC settings found
                 </div>
               ) : (
@@ -2670,26 +2607,26 @@ export const AccessControl: React.FC = () => {
                   {kycSettingsList.map((setting, index) => (
                     <div
                       key={setting.id || index}
-                      className="bg-gray-800 border border-gray-700 rounded-lg p-6"
+                      className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm"
                     >
                       {editingSetting?.id === setting.id && editFormData ? (
                         // Edit Mode
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
-                            <h4 className="text-white font-medium text-lg">
+                            <h4 className="text-slate-200 font-medium text-lg">
                               {setting.setting_key}
                             </h4>
                             <button
                               onClick={handleCancelEdit}
-                              className="text-gray-400 hover:text-white"
+                              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
                             >
                               <X className="h-5 w-5" />
                             </button>
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
-                              Setting Value (JSON)
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
+                              Setting value (JSON)
                             </label>
                             <textarea
                               value={editFormData.setting_value}
@@ -2700,17 +2637,17 @@ export const AccessControl: React.FC = () => {
                                 })
                               }
                               disabled={isSavingKycSetting}
-                              className="w-full bg-gray-900 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50 font-mono text-sm"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 font-mono text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                               rows={10}
                               placeholder='{"key": "value"}'
                             />
-                            <p className="text-gray-500 text-xs mt-1">
+                            <p className="text-slate-500 text-xs mt-1">
                               Enter valid JSON format
                             </p>
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Description
                             </label>
                             <input
@@ -2723,12 +2660,12 @@ export const AccessControl: React.FC = () => {
                                 })
                               }
                               disabled={isSavingKycSetting}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                               placeholder="Setting description"
                             />
                           </div>
 
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center gap-3">
                             <input
                               type="checkbox"
                               checked={editFormData.is_active}
@@ -2739,32 +2676,28 @@ export const AccessControl: React.FC = () => {
                                 })
                               }
                               disabled={isSavingKycSetting}
-                              className="rounded border-gray-500 disabled:opacity-50"
+                              className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                             />
-                            <span className="text-white">Active</span>
+                            <span className="text-slate-300 text-sm">Active</span>
                           </div>
 
-                          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                          <div className="flex justify-end gap-3 pt-4 border-t border-slate-700/80">
                             <button
                               onClick={handleCancelEdit}
                               disabled={isSavingKycSetting}
-                              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                              className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50 transition-colors"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={saveKycSetting}
                               disabled={isSavingKycSetting}
-                              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium flex items-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-red-500/20"
                             >
                               {isSavingKycSetting && (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                               )}
-                              <span>
-                                {isSavingKycSetting
-                                  ? "Saving..."
-                                  : "Save Changes"}
-                              </span>
+                              {isSavingKycSetting ? "Saving..." : "Save changes"}
                             </button>
                           </div>
                         </div>
@@ -2777,24 +2710,24 @@ export const AccessControl: React.FC = () => {
                                 {setting.setting_key}
                               </h4>
                               {setting.description && (
-                                <p className="text-gray-400 text-sm">
+                                <p className="text-slate-400 text-sm">
                                   {setting.description}
                                 </p>
                               )}
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                               <span
-                                className={`px-2 py-1 rounded text-xs font-medium ${
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium ${
                                   setting.is_active
-                                    ? "text-green-400 bg-green-400/10"
-                                    : "text-gray-400 bg-gray-400/10"
+                                    ? "text-emerald-400 bg-emerald-400/10 border border-emerald-500/20"
+                                    : "text-slate-400 bg-slate-500/10 border border-slate-600"
                                 }`}
                               >
                                 {setting.is_active ? "Active" : "Inactive"}
                               </span>
                               <button
                                 onClick={() => handleEditKycSetting(setting)}
-                                className="text-blue-400 hover:text-blue-300 p-1"
+                                className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
                                 title="Edit setting"
                               >
                                 <Edit2 className="h-4 w-4" />
@@ -2802,18 +2735,231 @@ export const AccessControl: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="mt-4 pt-4 border-t border-gray-700">
-                            <h5 className="text-white font-medium mb-3">
-                              Setting Values:
+                          <div className="mt-4 pt-4 border-t border-slate-700/80">
+                            {/* KYC settings – present structured layouts instead of raw JSON */}
+                            {setting.setting_key === "kyc_thresholds" && (
+                              <>
+                                <h5 className="text-slate-300 font-medium mb-3 text-sm uppercase tracking-wider">
+                                  KYC trigger thresholds
                             </h5>
-                            <div className="bg-gray-900 rounded-lg p-4">
-                              <pre className="text-gray-300 text-sm overflow-x-auto">
-                                {JSON.stringify(setting.setting_value, null, 2)}
-                              </pre>
+                                <div className="grid gap-4 md:grid-cols-3">
+                                  <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 flex flex-col justify-between">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                                        Daily limit
+                                      </span>
+                                      <Shield className="h-4 w-4 text-red-500" />
                             </div>
+                                    <p className="text-lg font-semibold text-white">
+                                      $
+                                      {typeof setting.setting_value?.daily_limit_usd ===
+                                      "number"
+                                        ? setting.setting_value.daily_limit_usd.toLocaleString(
+                                            "en-US",
+                                          )
+                                        : "—"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Maximum total exposure per player per day
+                                    </p>
                           </div>
 
-                          <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
+                                  <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 flex flex-col justify-between">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                                        Deposit trigger
+                                      </span>
+                                      <ArrowUpRight className="h-4 w-4 text-emerald-400" />
+                                    </div>
+                                    <p className="text-lg font-semibold text-white">
+                                      $
+                                      {typeof setting.setting_value
+                                        ?.deposit_threshold_usd === "number"
+                                        ? setting.setting_value.deposit_threshold_usd.toLocaleString(
+                                            "en-US",
+                                          )
+                                        : "—"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Single deposit amount that triggers enhanced checks
+                                    </p>
+                                  </div>
+
+                                  <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 flex flex-col justify-between">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                                        Withdrawal trigger
+                                      </span>
+                                      <ArrowDownRight className="h-4 w-4 text-amber-400" />
+                                    </div>
+                                    <p className="text-lg font-semibold text-white">
+                                      $
+                                      {typeof setting.setting_value
+                                        ?.withdrawal_threshold_usd === "number"
+                                        ? setting.setting_value.withdrawal_threshold_usd.toLocaleString(
+                                            "en-US",
+                                          )
+                                        : "—"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Single withdrawal amount that triggers enhanced checks
+                                    </p>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                            {setting.setting_key === "auto_kyc_rules" && (
+                              <>
+                                <h5 className="text-slate-300 font-medium mb-3 text-sm uppercase tracking-wider">
+                                  Automatic KYC rules
+                                </h5>
+                                <div className="space-y-3 rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-8 w-8 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                                        <Zap className="h-4 w-4 text-red-500" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-200">
+                                          Auto triggers
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                          Automatically raise KYC when thresholds are met
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <span
+                                      className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                                        setting.setting_value?.enable_auto_triggers
+                                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                                          : "bg-slate-700/60 text-slate-300 border border-slate-600"
+                                      }`}
+                                    >
+                                      {setting.setting_value?.enable_auto_triggers
+                                        ? "Enabled"
+                                        : "Disabled"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-3 border-t border-slate-700/80">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs text-slate-400 uppercase tracking-wide">
+                                        KYC expiry
+                                      </span>
+                                      <span className="text-sm font-medium text-slate-200">
+                                        {typeof setting.setting_value?.kyc_expiry_days ===
+                                        "number"
+                                          ? `${setting.setting_value.kyc_expiry_days} days`
+                                          : "Not configured"}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-xs text-slate-400 uppercase tracking-wide">
+                                        Withdrawals
+                                      </span>
+                                      <span className="text-sm font-medium text-slate-200">
+                                        {setting.setting_value?.require_kyc_for_withdrawals
+                                          ? "KYC required"
+                                          : "KYC optional"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                            {setting.setting_key === "document_requirements" && (
+                              <>
+                                <h5 className="text-slate-300 font-medium mb-3 text-sm uppercase tracking-wider">
+                                  Required document types
+                                </h5>
+                                <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 grid gap-3 md:grid-cols-2">
+                                  {[
+                                    {
+                                      key: "id_required",
+                                      label: "Government ID",
+                                    },
+                                    {
+                                      key: "proof_of_address_required",
+                                      label: "Proof of address",
+                                    },
+                                    {
+                                      key: "selfie_required",
+                                      label: "Selfie / live capture",
+                                    },
+                                    {
+                                      key: "sof_required",
+                                      label: "Source of funds",
+                                    },
+                                  ].map((item) => {
+                                    const required =
+                                      setting.setting_value &&
+                                      !!setting.setting_value[item.key as keyof typeof setting.setting_value];
+                                    return (
+                                      <div
+                                        key={item.key}
+                                        className="flex items-center gap-3 rounded-lg bg-slate-950/60 border border-slate-700/80 px-3 py-2.5"
+                                      >
+                                        {required ? (
+                                          <CheckCircle className="h-4 w-4 text-emerald-400" />
+                                        ) : (
+                                          <X className="h-4 w-4 text-slate-500" />
+                                        )}
+                                        <div>
+                                          <p className="text-sm text-slate-200">
+                                            {item.label}
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {required ? "Required" : "Optional"}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+
+                            {setting.setting_key !== "kyc_thresholds" &&
+                              setting.setting_key !== "auto_kyc_rules" &&
+                              setting.setting_key !== "document_requirements" && (
+                                <>
+                                  <h5 className="text-slate-300 font-medium mb-3 text-sm uppercase tracking-wider">
+                                    Setting values
+                                  </h5>
+                                  <div className="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
+                                    {setting.setting_value &&
+                                    typeof setting.setting_value === "object" ? (
+                                      <dl className="grid gap-3 md:grid-cols-2">
+                                        {Object.entries(
+                                          setting.setting_value as Record<string, any>,
+                                        ).map(([key, value]) => (
+                                          <div key={key} className="space-y-0.5">
+                                            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                              {key.replace(/_/g, " ")}
+                                            </dt>
+                                            <dd className="text-sm text-slate-200">
+                                              {typeof value === "boolean"
+                                                ? value
+                                                  ? "Enabled"
+                                                  : "Disabled"
+                                                : String(value)}
+                                            </dd>
+                                          </div>
+                                        ))}
+                                      </dl>
+                                    ) : (
+                                      <p className="text-sm text-slate-400 italic">
+                                        No structured values available.
+                                      </p>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                          </div>
+
+                          <div className="mt-4 pt-4 border-t border-slate-700/80 flex items-center justify-between text-xs text-slate-500">
                             <div>
                               <span>
                                 Created:{" "}
@@ -2832,7 +2978,7 @@ export const AccessControl: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <div className="text-purple-400 font-mono text-xs">
+                            <div className="text-slate-400 font-mono text-xs">
                               ID: {setting.id}
                             </div>
                           </div>
@@ -2842,6 +2988,8 @@ export const AccessControl: React.FC = () => {
                   ))}
                 </div>
               )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -2849,44 +2997,53 @@ export const AccessControl: React.FC = () => {
 
           {activeTab === "admin-users" && (
             <div className="space-y-6">
+              <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div className="px-6 py-4 border-b border-slate-700/80">
+                  <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                    Admin users
+                  </h3>
+                </div>
+                <div className="p-4 md:p-6 space-y-6">
               {/* Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-400 text-sm">Users</p>
-                      <p className="text-2xl font-bold text-white mt-1">
-                        {admins.length}
-                      </p>
+                      <p className="text-slate-400 text-sm font-medium">Users</p>
+                      <p className="text-2xl font-bold text-white mt-1">{admins.length}</p>
                     </div>
-                    <Shield className="h-8 w-8 text-purple-500" />
+                    <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/50">
+                      <Shield className="h-6 w-6 text-red-500" />
                   </div>
                 </div>
-                <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+                </div>
+                <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-gray-400 text-sm">Active Users</p>
+                      <p className="text-slate-400 text-sm font-medium">Active users</p>
                       <p className="text-2xl font-bold text-white mt-1">
                         {admins.filter((u) => u.status === "Active").length}
                       </p>
                     </div>
-                    <Users className="h-8 w-8 text-green-500" />
+                    <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/50">
+                      <Users className="h-6 w-6 text-emerald-500" />
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Search and Filter */}
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+              <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-4">
                 <div className="flex flex-col md:flex-row gap-4">
                   <div className="flex-1">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
                       <input
                         type="text"
                         placeholder="Search by username, email, ID, or name..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                       />
                     </div>
                   </div>
@@ -2895,16 +3052,12 @@ export const AccessControl: React.FC = () => {
                       value={statusFilter}
                       onChange={(e) =>
                         setStatusFilter(
-                          e.target.value as
-                            | "all"
-                            | "active"
-                            | "inactive"
-                            | "suspended",
+                          e.target.value as "all" | "active" | "inactive" | "suspended",
                         )
                       }
-                      className="px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="px-3 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                     >
-                      <option value="all">All Status</option>
+                      <option value="all">All status</option>
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                       <option value="suspended">Suspended</option>
@@ -2912,55 +3065,52 @@ export const AccessControl: React.FC = () => {
                     <button
                       onClick={fetchAdmins}
                       disabled={loading}
-                      className="px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center space-x-2"
+                      className="p-2.5 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 disabled:opacity-50"
+                      title="Refresh"
                     >
-                      <Filter className="h-4 w-4" />
-                      <span>Refresh</span>
+                      <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Admin Users Table */}
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-white font-medium">
-                    Users{" "}
-                    {loading
-                      ? "(...)"
-                      : `(${filteredAdmins.length} of ${admins.length})`}
+              <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
+                  <h4 className="text-slate-300 font-medium text-sm uppercase tracking-wider">
+                    Users {loading ? "(...)" : `(${filteredAdmins.length} of ${admins.length})`}
                   </h4>
                   <button
                     onClick={() => setShowCreateModal(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium inline-flex items-center gap-2 shadow-lg shadow-red-500/20"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Create User</span>
+                    Create user
                   </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <tr className="border-b border-slate-700/80 bg-slate-900/30">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           User ID
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Email
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Name
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Role
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Created
                         </th>
-                        <th className="text-right py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -2969,20 +3119,20 @@ export const AccessControl: React.FC = () => {
                       {filteredAdmins.map((user, idx) => (
                         <tr
                           key={idx}
-                          className="border-b border-gray-700/50 hover:bg-gray-700/30"
+                          className="border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors"
                         >
-                          <td className="py-3 px-4 text-purple-400 font-mono text-sm">
+                          <td className="py-3 px-4 text-red-400/90 font-mono text-sm">
                             {user.id}
                           </td>
-                          <td className="py-3 px-4 text-gray-300">
+                          <td className="py-3 px-4 text-slate-300">
                             {user.email}
                           </td>
-                          <td className="py-3 px-4 text-gray-300">
+                          <td className="py-3 px-4 text-slate-300">
                             {user.first_name || user.last_name
                               ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
                               : "N/A"}
                           </td>
-                          <td className="py-3 px-4 text-blue-400 text-sm">
+                          <td className="py-3 px-4 text-slate-300 text-sm">
                             {user.roles && user.roles.length > 0
                               ? user.roles.map((r: any) => r.name).join(", ")
                               : (user as any).role || "--"}
@@ -3109,7 +3259,7 @@ export const AccessControl: React.FC = () => {
                         <tr>
                           <td
                             colSpan={7}
-                            className="py-8 text-center text-gray-400"
+                            className="py-8 text-center text-slate-400 text-sm"
                           >
                             {searchTerm || statusFilter !== "all"
                               ? "No users found matching your criteria"
@@ -3119,6 +3269,8 @@ export const AccessControl: React.FC = () => {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
                 </div>
               </div>
             </div>

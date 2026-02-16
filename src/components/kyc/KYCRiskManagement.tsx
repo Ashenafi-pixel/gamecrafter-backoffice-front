@@ -8,8 +8,8 @@ import {
   Eye,
   FileText,
   Download,
-  Upload,
-  User,
+  ClipboardList,
+  Activity,
   Flag,
 } from "lucide-react";
 
@@ -259,9 +259,9 @@ export const KYCRiskManagement: React.FC = () => {
       case "resolved":
         return "text-green-400 bg-green-400/10";
       case "false_positive":
-        return "text-gray-400 bg-gray-400/10";
+        return "text-slate-400 bg-slate-500/10";
       default:
-        return "text-gray-400 bg-gray-400/10";
+        return "text-slate-400 bg-slate-500/10";
     }
   };
 
@@ -276,7 +276,7 @@ export const KYCRiskManagement: React.FC = () => {
       case "critical":
         return "text-red-500";
       default:
-        return "text-gray-400";
+        return "text-slate-400";
     }
   };
 
@@ -291,61 +291,64 @@ export const KYCRiskManagement: React.FC = () => {
       case "low":
         return <Flag className="h-4 w-4 text-green-400" />;
       default:
-        return <Flag className="h-4 w-4 text-gray-400" />;
+        return <Flag className="h-4 w-4 text-slate-400" />;
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            KYC & Risk Management
-          </h1>
-          <p className="text-gray-400 mt-1">
-            Manage KYC applications and monitor risk alerts
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80">
+            <Shield className="h-7 w-7 text-red-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              Compliance & risk
+            </h1>
+            <p className="text-slate-400 text-sm mt-0.5">
+              Identity verification queue and risk signals
+            </p>
+          </div>
         </div>
-        <div className="flex items-center space-x-3">
-          <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
-            <Download className="h-4 w-4" />
-            <span>Export Report</span>
-          </button>
-        </div>
+        <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white">
+          <Download className="h-4 w-4" />
+          <span>Export report</span>
+        </button>
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">Pending KYC</p>
-              <p className="text-2xl font-bold text-yellow-400 mt-1">
+              <p className="text-slate-400 text-sm font-medium">Awaiting verification</p>
+              <p className="text-2xl font-bold text-amber-400 mt-1 tabular-nums">
                 {
                   kycApplications.filter((app) => app.status === "pending")
                     .length
                 }
               </p>
             </div>
-            <Clock className="h-8 w-8 text-yellow-500" />
+            <Clock className="h-8 w-8 text-amber-500" />
           </div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">Active Risk Alerts</p>
-              <p className="text-2xl font-bold text-red-400 mt-1">
+              <p className="text-slate-400 text-sm font-medium">Open signals</p>
+              <p className="text-2xl font-bold text-red-400 mt-1 tabular-nums">
                 {riskAlerts.filter((alert) => alert.status === "active").length}
               </p>
             </div>
             <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">Under Review</p>
-              <p className="text-2xl font-bold text-blue-400 mt-1">
+              <p className="text-slate-400 text-sm font-medium">In review</p>
+              <p className="text-2xl font-bold text-blue-400 mt-1 tabular-nums">
                 {
                   kycApplications.filter((app) => app.status === "under_review")
                     .length
@@ -355,11 +358,11 @@ export const KYCRiskManagement: React.FC = () => {
             <Eye className="h-8 w-8 text-blue-500" />
           </div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">Approved Today</p>
-              <p className="text-2xl font-bold text-green-400 mt-1">
+              <p className="text-slate-400 text-sm font-medium">Cleared today</p>
+              <p className="text-2xl font-bold text-green-400 mt-1 tabular-nums">
                 {
                   kycApplications.filter(
                     (app) =>
@@ -374,68 +377,75 @@ export const KYCRiskManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg">
-        <div className="border-b border-gray-700">
-          <nav className="flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab("kyc-applications")}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "kyc-applications"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              KYC Applications
-            </button>
-            <button
-              onClick={() => setActiveTab("risk-alerts")}
-              className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                activeTab === "risk-alerts"
-                  ? "border-purple-500 text-purple-400"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              Risk Alerts
-            </button>
+      {/* Main card: vertical sidebar + content */}
+      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/95 to-slate-950/95 overflow-hidden flex flex-col md:flex-row min-h-[480px] backdrop-blur-sm">
+        <aside className="w-full md:w-56 lg:w-64 border-b md:border-b-0 md:border-r border-slate-700/80 bg-slate-800/30">
+          <nav className="p-3 space-y-6" aria-label="Compliance sections">
+            <div>
+              <h2 className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Compliance
+              </h2>
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => setActiveTab("kyc-applications")}
+                  className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                    activeTab === "kyc-applications"
+                      ? "bg-red-500/15 text-red-500"
+                      : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                  }`}
+                >
+                  <ClipboardList className="h-4 w-4 shrink-0" />
+                  Verification queue
+                </button>
+                <button
+                  onClick={() => setActiveTab("risk-alerts")}
+                  className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                    activeTab === "risk-alerts"
+                      ? "bg-red-500/15 text-red-500"
+                      : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                  }`}
+                >
+                  <Activity className="h-4 w-4 shrink-0" />
+                  Risk signals
+                </button>
+              </div>
+            </div>
           </nav>
-        </div>
+        </aside>
 
-        <div className="p-6">
+        <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
           {activeTab === "kyc-applications" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h4 className="text-white font-medium">
-                  KYC Applications ({kycApplications.length})
-                </h4>
-              </div>
+              <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                Verification queue ({kycApplications.length})
+              </h3>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-slate-700/80">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
-                        Application ID
+                    <tr className="border-b border-slate-700/80">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
+                        Reference
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Player
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Email
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Status
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
-                        Risk Level
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
+                        Risk level
                       </th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">
-                        Total Deposits
+                      <th className="text-right py-3 px-4 text-slate-400 font-medium">
+                        Total deposits
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Submitted
                       </th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-right py-3 px-4 text-slate-400 font-medium">
                         Actions
                       </th>
                     </tr>
@@ -444,15 +454,15 @@ export const KYCRiskManagement: React.FC = () => {
                     {kycApplications.map((application, index) => (
                       <tr
                         key={index}
-                        className="border-b border-gray-700/50 hover:bg-gray-700/30"
+                        className="border-b border-slate-700/50 hover:bg-slate-700/30"
                       >
-                        <td className="py-3 px-4 text-purple-400 font-mono text-sm">
+                        <td className="py-3 px-4 text-red-400 font-mono text-sm">
                           {application.id}
                         </td>
                         <td className="py-3 px-4 text-white font-medium">
                           {application.playerName}
                         </td>
-                        <td className="py-3 px-4 text-gray-300">
+                        <td className="py-3 px-4 text-slate-300">
                           {application.email}
                         </td>
                         <td className="py-3 px-4">
@@ -470,7 +480,7 @@ export const KYCRiskManagement: React.FC = () => {
                         <td className="py-3 px-4 text-white text-right font-medium">
                           ${application.totalDeposits.toLocaleString()}
                         </td>
-                        <td className="py-3 px-4 text-gray-400 text-sm">
+                        <td className="py-3 px-4 text-slate-400 text-sm">
                           {application.submittedDate}
                         </td>
                         <td className="py-3 px-4">
@@ -516,38 +526,36 @@ export const KYCRiskManagement: React.FC = () => {
 
           {activeTab === "risk-alerts" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h4 className="text-white font-medium">
-                  Risk Alerts ({riskAlerts.length})
-                </h4>
-              </div>
+              <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                Risk signals ({riskAlerts.length})
+              </h3>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-slate-700/80">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
-                        Alert ID
+                    <tr className="border-b border-slate-700/80">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
+                        Signal ID
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Player
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
-                        Alert Type
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
+                        Type
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Severity
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Description
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Status
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Detected
                       </th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-right py-3 px-4 text-slate-400 font-medium">
                         Actions
                       </th>
                     </tr>
@@ -556,9 +564,9 @@ export const KYCRiskManagement: React.FC = () => {
                     {riskAlerts.map((alert, index) => (
                       <tr
                         key={index}
-                        className="border-b border-gray-700/50 hover:bg-gray-700/30"
+                        className="border-b border-slate-700/50 hover:bg-slate-700/30"
                       >
-                        <td className="py-3 px-4 text-purple-400 font-mono text-sm">
+                        <td className="py-3 px-4 text-red-400 font-mono text-sm">
                           {alert.id}
                         </td>
                         <td className="py-3 px-4 text-white font-medium">
@@ -577,7 +585,7 @@ export const KYCRiskManagement: React.FC = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-300 max-w-xs truncate">
+                        <td className="py-3 px-4 text-slate-300 max-w-xs truncate">
                           {alert.description}
                         </td>
                         <td className="py-3 px-4">
@@ -634,17 +642,17 @@ export const KYCRiskManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* KYC Application Detail Modal */}
+      {/* Verification detail modal */}
       {showApplicationModal && selectedApplication && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-b from-slate-900/98 to-slate-950/98 border border-slate-800/80 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-white">
-                KYC Application Details
+                Verification details
               </h3>
               <button
                 onClick={() => setShowApplicationModal(false)}
-                className="text-gray-400 hover:text-white"
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -653,28 +661,28 @@ export const KYCRiskManagement: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Application ID
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Reference
                   </label>
-                  <p className="text-white font-mono">
+                  <p className="text-white font-mono text-sm">
                     {selectedApplication.id}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Player Name
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Player
                   </label>
                   <p className="text-white">{selectedApplication.playerName}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">
+                  <label className="block text-sm text-slate-400 mb-1">
                     Email
                   </label>
                   <p className="text-white">{selectedApplication.email}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">
-                    Risk Level
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Risk level
                   </label>
                   <p
                     className={`font-medium ${getRiskColor(selectedApplication.riskLevel)}`}
@@ -685,21 +693,21 @@ export const KYCRiskManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-3">
+                <label className="block text-sm text-slate-400 mb-3">
                   Documents
                 </label>
                 <div className="space-y-2">
                   {selectedApplication.documents.map((doc, index) => (
                     <div
                       key={index}
-                      className="flex items-center justify-between bg-gray-700 p-3 rounded"
+                      className="flex items-center justify-between bg-slate-800/60 border border-slate-700/80 p-3 rounded-xl"
                     >
-                      <div className="flex items-center space-x-3">
-                        <FileText className="h-4 w-4 text-gray-400" />
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-slate-400" />
                         <span className="text-white">{doc.type}</span>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <span className="text-gray-400 text-sm">
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 text-sm">
                           {doc.uploadDate}
                         </span>
                         <span
@@ -715,17 +723,17 @@ export const KYCRiskManagement: React.FC = () => {
 
               {selectedApplication.notes && (
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">
+                  <label className="block text-sm text-slate-400 mb-2">
                     Notes
                   </label>
-                  <p className="text-white bg-gray-700 p-3 rounded">
+                  <p className="text-white bg-slate-800/60 border border-slate-700/80 p-3 rounded-xl text-sm">
                     {selectedApplication.notes}
                   </p>
                 </div>
               )}
 
               {selectedApplication.status === "pending" && (
-                <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-700">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/80">
                   <button
                     onClick={() =>
                       handleKYCAction(
@@ -734,7 +742,7 @@ export const KYCRiskManagement: React.FC = () => {
                         "Rejected from detailed review",
                       )
                     }
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
+                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl font-medium text-sm"
                   >
                     Reject
                   </button>
@@ -746,7 +754,7 @@ export const KYCRiskManagement: React.FC = () => {
                         "Approved after detailed review",
                       )
                     }
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-xl font-medium text-sm"
                   >
                     Approve
                   </button>
