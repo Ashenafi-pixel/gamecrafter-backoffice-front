@@ -35,71 +35,15 @@ import {
 import { gameManagementService } from "../../services/gameManagementService";
 import { houseEdgeManagementService } from "../../services/houseEdgeManagementService";
 import { brandService, Brand } from "../../services/brandService";
+import { providerService, Provider } from "../../services/providerService";
 import GameSearchModal from "../houseEdgeManagement/GameSearchModal";
 import BulkGameSearchModal from "../houseEdgeManagement/BulkGameSearchModal";
 import GameImportManagement from "./GameImportManagement";
 
 type TabType = "games" | "house-edges" | "game-import";
 
-// Demo data – real game names and providers worldwide (no API calls for games/house edges)
-function getMockGames(): Game[] {
-  const now = new Date().toISOString();
-  const base = [
-    { name: "Starburst", provider: "netent", partner: "netent", rtp: "96.09" },
-    { name: "Gonzo's Quest", provider: "netent", partner: "netent", rtp: "95.97" },
-    { name: "Book of Dead", provider: "playngo", partner: "playngo", rtp: "96.21" },
-    { name: "Sweet Bonanza", provider: "pragmatic", partner: "pragmatic", rtp: "96.48" },
-    { name: "Gates of Olympus", provider: "pragmatic", partner: "pragmatic", rtp: "96.50" },
-    { name: "Big Bass Bonanza", provider: "pragmatic", partner: "pragmatic", rtp: "96.71" },
-    { name: "Mega Moolah", provider: "microgaming", partner: "microgaming", rtp: "88.12" },
-    { name: "Immortal Romance", provider: "microgaming", partner: "microgaming", rtp: "96.86" },
-    { name: "Lightning Roulette", provider: "evolution", partner: "evolution", rtp: "97.30" },
-    { name: "Crazy Time", provider: "evolution", partner: "evolution", rtp: "95.41" },
-    { name: "Monopoly Live", provider: "evolution", partner: "evolution", rtp: "96.23" },
-    { name: "Dead or Alive 2", provider: "netent", partner: "netent", rtp: "96.82" },
-    { name: "Reactoonz", provider: "playngo", partner: "playngo", rtp: "96.51" },
-    { name: "Wolf Gold", provider: "pragmatic", partner: "pragmatic", rtp: "96.01" },
-    { name: "Starburst XXXtreme", provider: "netent", partner: "netent", rtp: "96.26" },
-    { name: "Fire Joker", provider: "playngo", partner: "playngo", rtp: "96.15" },
-    { name: "The Dog House", provider: "pragmatic", partner: "pragmatic", rtp: "96.51" },
-    { name: "Bonanza", provider: "btg", partner: "bigtimegaming", rtp: "96.00" },
-    { name: "Extra Chilli", provider: "btg", partner: "bigtimegaming", rtp: "96.73" },
-    { name: "Jammin' Jars", provider: "pushgaming", partner: "pushgaming", rtp: "96.83" },
-    { name: "Razor Shark", provider: "pushgaming", partner: "pushgaming", rtp: "96.70" },
-    { name: "Vikings Go Berzerk", provider: "yggdrasil", partner: "yggdrasil", rtp: "96.10" },
-    { name: "Temple Tumble", provider: "relax", partner: "relaxgaming", rtp: "96.08" },
-    { name: "San Quentin", provider: "nolimit", partner: "nolimitcity", rtp: "96.04" },
-    { name: "Fire in the Hole", provider: "nolimit", partner: "nolimitcity", rtp: "96.08" },
-    { name: "Buffalo King", provider: "pragmatic", partner: "pragmatic", rtp: "96.06" },
-    { name: "Legacy of Dead", provider: "playngo", partner: "playngo", rtp: "96.58" },
-    { name: "Deadwood", provider: "nolimit", partner: "nolimitcity", rtp: "96.08" },
-    { name: "Money Train 2", provider: "relax", partner: "relaxgaming", rtp: "96.10" },
-    { name: "Wanted Dead or a Wild", provider: "playngo", partner: "playngo", rtp: "96.42" },
-  ];
-  const startId = 130300314;
-  return base.map((g, i) => {
-    const id = `mock-game-${i + 1}`;
-    const game_id = String(startId + i);
-    const isActive = i % 4 !== 3;
-    const enabled = i % 5 !== 2;
-    return {
-      id,
-      name: g.name,
-      status: (isActive ? "ACTIVE" : "INACTIVE") as Game["status"],
-      timestamp: now,
-      photo: "",
-      enabled,
-      game_id,
-      internal_name: game_id,
-      integration_partner: g.partner,
-      provider: g.provider,
-      created_at: now,
-      updated_at: now,
-      rtp_percent: g.rtp,
-    };
-  });
-}
-
+// Demo helpers were previously used to generate static mock data.
+// Games and house edges are now loaded from the backend services.
 function getMockHouseEdges(mockGames: Game[]): HouseEdge[] {
   const now = new Date().toISOString();
   const types = ["slot", "table", "live"] as const;
@@ -132,8 +76,8 @@ const MergedGameManagement: React.FC = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<TabType>("games");
 
-  // Games state (demo: full list in state, loadGames filters/paginates)
-  const [allGames, setAllGames] = useState<Game[]>(() => getMockGames());
+  // Games state (backed by API, with a cached list for selectors/modals)
+  const [allGames, setAllGames] = useState<Game[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
   const [gamesCreating, setGamesCreating] = useState(false);
@@ -145,6 +89,7 @@ const MergedGameManagement: React.FC = () => {
   const [showViewGameModal, setShowViewGameModal] = useState(false);
   const [showDeleteGameModal, setShowDeleteGameModal] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
+  const [editingProviderId, setEditingProviderId] = useState<string>("");
   const [viewingGame, setViewingGame] = useState<Game | null>(null);
   const [gameToDelete, setGameToDelete] = useState<Game | null>(null);
   const [gamesFilters, setGamesFilters] = useState<GameFilters>({
@@ -159,10 +104,8 @@ const MergedGameManagement: React.FC = () => {
     current_page: 1,
   });
 
-  // House Edges state (demo: full list in state, loadHouseEdges filters/paginates)
-  const [allHouseEdges, setAllHouseEdges] = useState<HouseEdge[]>(() =>
-    getMockHouseEdges(getMockGames()),
-  );
+  // House Edges state (now starts empty; can be wired to backend service)
+  const [allHouseEdges, setAllHouseEdges] = useState<HouseEdge[]>([]);
   const [houseEdges, setHouseEdges] = useState<HouseEdge[]>([]);
   const [houseEdgesLoading, setHouseEdgesLoading] = useState(false);
   const [houseEdgesCreating, setHouseEdgesCreating] = useState(false);
@@ -216,6 +159,12 @@ const MergedGameManagement: React.FC = () => {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
 
+  // Provider selection state
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [providerSearch, setProviderSearch] = useState("");
+  const [editProviderSearch, setEditProviderSearch] = useState("");
+
   // Helper functions
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -257,7 +206,7 @@ const MergedGameManagement: React.FC = () => {
     game_id: "",
     internal_name: "",
     integration_partner: "groove",
-    provider: "groove_gaming",
+    provider_id: "",
   });
 
   // House Edges form state
@@ -302,44 +251,37 @@ const MergedGameManagement: React.FC = () => {
   const [applyAllLoading, setApplyAllLoading] = useState(false);
   const [removeAllLoading, setRemoveAllLoading] = useState(false);
 
-  // Load games (demo: filter and paginate from allGames, no API)
-  const loadGames = useCallback(() => {
+  // Load games from backend (filters & pagination handled by API)
+  const loadGames = useCallback(async () => {
     setGamesLoading(true);
     setError(null);
-    const f = gamesFilters;
-    let list = [...allGames];
-    if (f.search) {
-      const q = f.search.toLowerCase();
-      list = list.filter(
-        (g) =>
-          g.name.toLowerCase().includes(q) ||
-          (g.game_id && g.game_id.toLowerCase().includes(q)) ||
-          (g.provider && g.provider.toLowerCase().includes(q)),
-      );
+    try {
+      const response = await gameManagementService.getGames(gamesFilters);
+      if (response.success && response.data) {
+        const payload = response.data;
+        const list = payload.games || [];
+        setGames(list);
+        setAllGames(list);
+        setGamesPagination({
+          total: payload.total_count ?? payload.total ?? list.length,
+          total_pages: payload.total_pages ?? 1,
+          current_page: payload.page ?? gamesFilters.page ?? 1,
+        });
+      } else {
+        setError(response.message || "Failed to load games");
+        toast.error(response.message || "Failed to load games");
+        setGames([]);
+      }
+    } catch (err: any) {
+      console.error("Error loading games:", err);
+      const msg = err.message || "Failed to load games";
+      setError(msg);
+      toast.error(msg);
+      setGames([]);
+    } finally {
+      setGamesLoading(false);
     }
-    if (f.status) list = list.filter((g) => g.status === f.status);
-    if (f.provider)
-      list = list.filter((g) =>
-        g.provider?.toLowerCase().includes(f.provider!.toLowerCase()),
-      );
-    if (f.game_id)
-      list = list.filter((g) =>
-        g.game_id?.toLowerCase().includes(f.game_id!.toLowerCase()),
-      );
-    if (f.enabled !== undefined) list = list.filter((g) => g.enabled === f.enabled);
-    const total = list.length;
-    const perPage = f.per_page || 10;
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
-    const page = Math.min(Math.max(1, f.page || 1), totalPages);
-    const start = (page - 1) * perPage;
-    setGames(list.slice(start, start + perPage));
-    setGamesPagination({
-      total,
-      total_pages: totalPages,
-      current_page: page,
-    });
-    setGamesLoading(false);
-  }, [allGames, gamesFilters]);
+  }, [gamesFilters]);
 
   // Load house edges (demo: filter and paginate from allHouseEdges, no API)
   const loadHouseEdges = useCallback(() => {
@@ -419,6 +361,25 @@ const MergedGameManagement: React.FC = () => {
     }
   }, []);
 
+  const fetchProviders = useCallback(async () => {
+    try {
+      setLoadingProviders(true);
+      const response = await providerService.getProviders({
+        page: 1,
+        "per-page": 500,
+        is_active: true, // Only fetch active providers
+      });
+      if (response.success && response.data) {
+        setProviders(response.data.providers || []);
+      }
+    } catch (err: any) {
+      console.error("Error fetching providers:", err);
+      toast.error("Failed to fetch providers");
+    } finally {
+      setLoadingProviders(false);
+    }
+  }, []);
+
   const handleBrandChange = (brandId: string) => {
     setSelectedBrandId(brandId);
     localStorage.setItem("game_management_brand_id", brandId);
@@ -426,7 +387,8 @@ const MergedGameManagement: React.FC = () => {
 
   useEffect(() => {
     fetchBrands();
-  }, [fetchBrands]);
+    fetchProviders();
+  }, [fetchBrands, fetchProviders]);
 
   // Load data based on active tab
   useEffect(() => {
@@ -438,65 +400,91 @@ const MergedGameManagement: React.FC = () => {
     }
   }, [activeTab, loadGames, loadHouseEdges, loadStats]);
 
-  // Games handlers (demo: update allGames only, no API)
-  const handleCreateGame = () => {
+  // Games handlers (now using backend API)
+  const handleCreateGame = async () => {
     if (gamesCreating) return;
     setGamesCreating(true);
-    const now = new Date().toISOString();
-    const game: Game = {
-      id: `mock-game-${Date.now()}`,
-      name: newGame.name,
-      status: newGame.status,
-      timestamp: now,
-      photo: newGame.photo || "",
-      enabled: newGame.enabled,
-      game_id: newGame.game_id,
-      internal_name: newGame.internal_name || newGame.game_id,
-      integration_partner: newGame.integration_partner,
-      provider: newGame.provider,
-      created_at: now,
-      updated_at: now,
-    };
-    setAllGames((prev) => [...prev, game]);
-    toast.success("Game created successfully");
-    setShowCreateGameModal(false);
-    setNewGame({
-      name: "",
-      status: "ACTIVE",
-      photo: "",
-      enabled: true,
-      game_id: "",
-      internal_name: "",
-      integration_partner: "groove",
-      provider: "groove_gaming",
-    });
-    setGamesCreating(false);
+    try {
+      const response = await gameManagementService.createGame(newGame);
+      if (response.success) {
+        toast.success("Game created successfully");
+        setShowCreateGameModal(false);
+        setNewGame({
+          name: "",
+          status: "ACTIVE",
+          photo: "",
+          enabled: true,
+          game_id: "",
+          internal_name: "",
+          integration_partner: "groove",
+          provider_id: "",
+        });
+        await loadGames();
+      } else {
+        toast.error(response.message || "Failed to create game");
+      }
+    } catch (err: any) {
+      console.error("Error creating game:", err);
+      toast.error(err.message || "Failed to create game");
+    } finally {
+      setGamesCreating(false);
+    }
   };
 
-  const handleUpdateGame = () => {
+  const handleUpdateGame = async () => {
     if (!editingGame || gamesUpdating) return;
     setGamesUpdating(true);
-    const updated: Game = {
-      ...editingGame,
-      updated_at: new Date().toISOString(),
-    };
-    setAllGames((prev) =>
-      prev.map((g) => (g.id === editingGame.id ? updated : g)),
-    );
-    toast.success("Game updated successfully");
-    setShowEditGameModal(false);
-    setEditingGame(null);
-    setGamesUpdating(false);
+    try {
+      const updateData: UpdateGameRequest = {
+        name: editingGame.name,
+        status: editingGame.status,
+        photo: editingGame.photo,
+        enabled: editingGame.enabled,
+        game_id: editingGame.game_id,
+        internal_name: editingGame.internal_name,
+        integration_partner: editingGame.integration_partner,
+        provider_id: editingProviderId,
+      };
+      const response = await gameManagementService.updateGame(
+        editingGame.id,
+        updateData,
+      );
+      if (response.success) {
+        toast.success("Game updated successfully");
+        setShowEditGameModal(false);
+        setEditingGame(null);
+        setEditingProviderId("");
+        await loadGames();
+      } else {
+        toast.error(response.message || "Failed to update game");
+      }
+    } catch (err: any) {
+      console.error("Error updating game:", err);
+      toast.error(err.message || "Failed to update game");
+    } finally {
+      setGamesUpdating(false);
+    }
   };
 
-  const handleDeleteGame = () => {
+  const handleDeleteGame = async () => {
     if (!gameToDelete || gamesDeleting) return;
     setGamesDeleting(true);
-    setAllGames((prev) => prev.filter((g) => g.id !== gameToDelete.id));
-    toast.success("Game deleted successfully");
-    setShowDeleteGameModal(false);
-    setGameToDelete(null);
-    setGamesDeleting(false);
+    try {
+      const response = await gameManagementService.deleteGame(gameToDelete.id);
+      if (response.success) {
+        toast.success("Game deleted successfully");
+        setShowDeleteGameModal(false);
+        setGameToDelete(null);
+        await loadGames();
+      } else {
+        toast.error(response.message || "Failed to delete game");
+      }
+    } catch (err: any) {
+      console.error("Error deleting game:", err);
+      toast.error(err.message || "Failed to delete game");
+    } finally {
+      setGamesDeleting(false);
+    }
   };
 
   const handleGamesPageChange = (page: number) => {
@@ -1136,6 +1124,11 @@ const MergedGameManagement: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       setEditingGame(game);
+                                      // Find provider_id from provider name
+                                      const foundProvider = providers.find(
+                                        (p) => p.name === game.provider || p.code === game.provider
+                                      );
+                                      setEditingProviderId(foundProvider?.id || "");
                                       setShowEditGameModal(true);
                                       closeDropdown();
                                     }}
@@ -1669,19 +1662,48 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Provider
+                    Provider *
                   </label>
-                  <input
-                    type="text"
-                    value={newGame.provider}
-                    onChange={(e) =>
-                      setNewGame((prev) => ({
-                        ...prev,
-                        provider: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                  />
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Search provider by name or code..."
+                      value={providerSearch}
+                      onChange={(e) => setProviderSearch(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
+                    />
+                    <select
+                      value={newGame.provider_id}
+                      onChange={(e) =>
+                        setNewGame((prev) => ({
+                          ...prev,
+                          provider_id: e.target.value,
+                        }))
+                      }
+                      required
+                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      disabled={loadingProviders}
+                    >
+                      <option value="">Select a provider</option>
+                      {providers
+                        .filter((provider) => {
+                          const q = providerSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            provider.name.toLowerCase().includes(q) ||
+                            provider.code.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name} ({provider.code})
+                          </option>
+                        ))}
+                    </select>
+                    {loadingProviders && (
+                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                    )}
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
@@ -1829,18 +1851,43 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Provider
+                    Provider *
                   </label>
-                  <input
-                    type="text"
-                    value={editingGame.provider}
-                    onChange={(e) =>
-                      setEditingGame((prev) =>
-                        prev ? { ...prev, provider: e.target.value } : null,
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                  />
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Search provider by name or code..."
+                      value={editProviderSearch}
+                      onChange={(e) => setEditProviderSearch(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
+                    />
+                    <select
+                      value={editingProviderId}
+                      onChange={(e) => setEditingProviderId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      disabled={loadingProviders}
+                    >
+                      <option value="">Select a provider</option>
+                      {providers
+                        .filter((provider) => {
+                          const q = editProviderSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            provider.name.toLowerCase().includes(q) ||
+                            provider.code.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name} ({provider.code})
+                          </option>
+                        ))}
+                    </select>
+                    {loadingProviders && (
+                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                    )}
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
@@ -1860,7 +1907,10 @@ const MergedGameManagement: React.FC = () => {
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button
-                  onClick={() => setShowEditGameModal(false)}
+                  onClick={() => {
+                    setShowEditGameModal(false);
+                    setEditingProviderId("");
+                  }}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-slate-700"
                 >
                   Cancel

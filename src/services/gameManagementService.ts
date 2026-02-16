@@ -1,4 +1,4 @@
-import { adminSvc } from "./apiService";
+import { adminSvc, ApiResponse } from "./apiService";
 import {
   Game,
   CreateGameRequest,
@@ -8,7 +8,9 @@ import {
 } from "../types/gameManagement";
 
 export class GameManagementService {
-  async getGames(filters: GameFilters = {}): Promise<GameListResponse> {
+  async getGames(
+    filters: GameFilters = {},
+  ): Promise<ApiResponse<GameListResponse>> {
     const params = new URLSearchParams();
 
     if (filters.page) params.append("page", filters.page.toString());
@@ -29,53 +31,39 @@ export class GameManagementService {
     return response;
   }
 
-  async getGameById(
-    id: string,
-  ): Promise<{ success: boolean; data: Game; message: string }> {
-    const response = await adminSvc.get<{
-      success: boolean;
-      data: Game;
-      message: string;
-    }>(`/game-management/${id}`);
+  async getGameById(id: string): Promise<ApiResponse<Game>> {
+    const response = await adminSvc.get<Game>(`/game-management/${id}`);
     return response;
   }
 
   async createGame(
     gameData: CreateGameRequest,
-  ): Promise<{ success: boolean; data: Game; message: string }> {
-    const response = await adminSvc.post<{
-      success: boolean;
-      data: Game;
-      message: string;
-    }>("/game-management", gameData);
+  ): Promise<ApiResponse<Game>> {
+    const response = await adminSvc.post<Game>("/game-management", gameData);
     return response;
   }
 
   async updateGame(
     id: string,
     gameData: UpdateGameRequest,
-  ): Promise<{ success: boolean; data: Game; message: string }> {
-    const response = await adminSvc.put<{
-      success: boolean;
-      data: Game;
-      message: string;
-    }>(`/game-management/${id}`, gameData);
+  ): Promise<ApiResponse<Game>> {
+    const response = await adminSvc.put<Game>(
+      `/game-management/${id}`,
+      gameData,
+    );
     return response;
   }
 
-  async deleteGame(id: string): Promise<{ success: boolean; message: string }> {
-    const response = await adminSvc.delete<{
-      success: boolean;
-      message: string;
-    }>(`/game-management/${id}`);
+  async deleteGame(id: string): Promise<ApiResponse<void>> {
+    const response = await adminSvc.delete<void>(`/game-management/${id}`);
     return response;
   }
 
   async bulkUpdateGames(
     gameIds: string[],
     updates: UpdateGameRequest,
-  ): Promise<{ success: boolean; message: string }> {
-    const response = await adminSvc.put<{ success: boolean; message: string }>(
+  ): Promise<ApiResponse<void>> {
+    const response = await adminSvc.put<void>(
       "/game-management/bulk",
       {
         game_ids: gameIds,
@@ -87,34 +75,23 @@ export class GameManagementService {
 
   async bulkDeleteGames(
     gameIds: string[],
-  ): Promise<{ success: boolean; message: string }> {
-    const response = await adminSvc.delete<{
-      success: boolean;
-      message: string;
-    }>("/game-management/bulk", {
+  ): Promise<ApiResponse<void>> {
+    const response = await adminSvc.delete<void>("/game-management/bulk", {
       data: { game_ids: gameIds },
     });
     return response;
   }
 
-  async getGameStats(): Promise<{
-    success: boolean;
-    data: any;
-    message: string;
-  }> {
-    const response = await adminSvc.get<{
-      success: boolean;
-      data: any;
-      message: string;
-    }>("/game-management/stats");
+  async getGameStats(): Promise<ApiResponse<any>> {
+    const response = await adminSvc.get<any>("/game-management/stats");
     return response;
   }
 
   async bulkUpdateGameStatus(
     gameIds: string[],
     status: string,
-  ): Promise<{ success: boolean; message: string }> {
-    const response = await adminSvc.put<{ success: boolean; message: string }>(
+  ): Promise<ApiResponse<void>> {
+    const response = await adminSvc.put<void>(
       "/game-management/bulk-status",
       {
         game_ids: gameIds,
