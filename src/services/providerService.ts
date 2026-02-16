@@ -36,6 +36,7 @@ export interface UpdateProviderRequest {
   is_active?: boolean;
   integration_type?: string;
   supported_currencies?: string[];
+  id: string;
 }
 
 export interface GetProvidersRequest {
@@ -73,6 +74,28 @@ class ProviderService {
       const response = await adminSvc.get<GetProvidersResponse>(
         `${this.BASE_PATH}?${queryParams.toString()}`,
       );
+      
+      // Handle different response formats
+      if (response.success && response.data) {
+        // If response.data is already GetProvidersResponse format
+        if (response.data.providers) {
+          return response;
+        }
+        // If response.data is an array, wrap it
+        if (Array.isArray(response.data)) {
+          return {
+            ...response,
+            data: {
+              providers: response.data,
+              total_count: response.data.length,
+              total_pages: 1,
+              current_page: params.page,
+              per_page: params["per-page"],
+            },
+          };
+        }
+      }
+      
       return response;
     } catch (error: any) {
       console.error("Error fetching providers:", error);
@@ -94,7 +117,9 @@ class ProviderService {
     data: CreateProviderRequest,
   ): Promise<ApiResponse<Provider>> {
     try {
+      console.log("Creating provider with data:", data);
       const response = await adminSvc.post<Provider>(this.BASE_PATH, data);
+      console.log("Provider created successfully:", response);
       return response;
     } catch (error: any) {
       console.error("Error creating provider:", error);
@@ -107,10 +132,17 @@ class ProviderService {
     data: UpdateProviderRequest,
   ): Promise<ApiResponse<Provider>> {
     try {
+      // Include id in the request body
+      const requestData = {
+        ...data,
+        id: id,
+      };
+      console.log("Updating provider with data:", requestData);
       const response = await adminSvc.patch<Provider>(
         `${this.BASE_PATH}/${id}`,
-        data,
+        requestData,
       );
+      console.log("Provider updated successfully:", response);
       return response;
     } catch (error: any) {
       console.error("Error updating provider:", error);

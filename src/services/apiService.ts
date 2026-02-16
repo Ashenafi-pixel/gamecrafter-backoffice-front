@@ -6,7 +6,7 @@ interface ApiServiceConfig {
   timeout?: number;
 }
 
-interface ApiResponse<T> {
+export interface ApiResponse<T> {
   meta?: any; // Pagination metadata (total, page, page_size, pages)
   message: string;
   success: boolean;

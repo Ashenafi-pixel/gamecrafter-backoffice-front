@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
-import { CreateProviderRequest } from "../../services/providerService";
+import { CreateProviderRequest, UpdateProviderRequest } from "../../services/providerService";
 
 interface ProviderFormModalProps {
   title: string;
@@ -14,7 +14,7 @@ interface ProviderFormModalProps {
     integration_type: string;
   };
   onClose: () => void;
-  onSave: (data: CreateProviderRequest) => void;
+  onSave: (data: CreateProviderRequest | UpdateProviderRequest) => void;
   saving: boolean;
   submitLabel: string;
 }

@@ -23,43 +23,7 @@ import {
 } from "../../services/providerService";
 import { ProviderFormModal } from "./ProviderFormModal";
 
-const MOCK_PROVIDERS: Provider[] = [
-  {
-    id: "1",
-    name: "Groove Gaming",
-    code: "groove",
-    description: "Slots and table games provider",
-    api_url: "https://api.groove.gaming",
-    is_active: true,
-    integration_type: "API",
-    game_count: 1240,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    name: "Pragmatic Play",
-    code: "pragmatic",
-    description: "Live casino and slots",
-    api_url: "https://api.pragmaticplay.net",
-    is_active: true,
-    integration_type: "API",
-    game_count: 890,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    name: "Evolution Gaming",
-    code: "evolution",
-    description: "Live dealer games",
-    is_active: false,
-    integration_type: "API",
-    game_count: 156,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
+// Mock providers removed - using API only
 
 const emptyForm = {
   name: "",
@@ -79,7 +43,6 @@ export default function ProviderManagement() {
   const [deleting, setDeleting] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [useMock, setUseMock] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -116,19 +79,17 @@ export default function ProviderManagement() {
           totalPages: response.data!.total_pages,
           currentPage: response.data!.current_page,
         }));
-        setUseMock(false);
       } else {
-        throw new Error("Failed to load");
+        const errorMessage = response.message || "Failed to load providers";
+        setError(errorMessage);
+        setProviders([]);
+        toast.error(errorMessage);
       }
-    } catch {
-      setUseMock(true);
-      setProviders(MOCK_PROVIDERS);
-      setPagination((prev) => ({
-        ...prev,
-        total: MOCK_PROVIDERS.length,
-        totalPages: 1,
-        currentPage: 1,
-      }));
+    } catch (err: any) {
+      const errorMessage = err.message || "Failed to load providers";
+      setError(errorMessage);
+      setProviders([]);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -149,26 +110,13 @@ export default function ProviderManagement() {
     }
     setCreating(true);
     try {
-      if (useMock) {
-        const added: Provider = {
-          id: String(Date.now()),
-          ...data,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        setProviders((prev) => [added, ...prev]);
-        setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
+      const response = await providerService.createProvider(data);
+      if (response.success) {
         toast.success("Provider created successfully");
         setShowCreateModal(false);
+        loadProviders(); // Reload from API
       } else {
-        const response = await providerService.createProvider(data);
-        if (response.success) {
-          toast.success("Provider created successfully");
-          setShowCreateModal(false);
-          loadProviders();
-        } else {
-          toast.error(response.message || "Failed to create provider");
-        }
+        toast.error(response.message || "Failed to create provider");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to create provider");
@@ -181,25 +129,14 @@ export default function ProviderManagement() {
     if (updating) return;
     setUpdating(true);
     try {
-      if (useMock) {
-        setProviders((prev) =>
-          prev.map((p) =>
-            p.id === id ? { ...p, ...data, updated_at: new Date().toISOString() } : p
-          )
-        );
+      const response = await providerService.updateProvider(id, data);
+      if (response.success) {
         toast.success("Provider updated successfully");
         setShowEditModal(false);
         setEditingProvider(null);
+        loadProviders(); // Reload from API
       } else {
-        const response = await providerService.updateProvider(id, data);
-        if (response.success) {
-          toast.success("Provider updated successfully");
-          setShowEditModal(false);
-          setEditingProvider(null);
-          loadProviders();
-        } else {
-          toast.error(response.message || "Failed to update provider");
-        }
+        toast.error(response.message || "Failed to update provider");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to update provider");
@@ -212,23 +149,15 @@ export default function ProviderManagement() {
     if (toggling) return;
     setToggling(provider.id);
     try {
-      if (useMock) {
-        setProviders((prev) =>
-          prev.map((p) =>
-            p.id === provider.id ? { ...p, is_active: !p.is_active } : p
-          )
-        );
+      const response = await providerService.updateProvider(provider.id, {
+        id: provider.id,
+        is_active: !provider.is_active,
+      });
+      if (response.success) {
         toast.success(provider.is_active ? "Provider set to inactive" : "Provider set to active");
+        loadProviders(); // Reload from API
       } else {
-        const response = await providerService.updateProvider(provider.id, {
-          is_active: !provider.is_active,
-        });
-        if (response.success) {
-          toast.success(provider.is_active ? "Provider set to inactive" : "Provider set to active");
-          loadProviders();
-        } else {
-          toast.error(response.message || "Failed to update status");
-        }
+        toast.error(response.message || "Failed to update status");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to update status");
@@ -246,22 +175,14 @@ export default function ProviderManagement() {
     if (!providerToDelete || deleting) return;
     setDeleting(true);
     try {
-      if (useMock) {
-        setProviders((prev) => prev.filter((p) => p.id !== providerToDelete.id));
-        setPagination((prev) => ({ ...prev, total: Math.max(0, prev.total - 1) }));
+      const response = await providerService.deleteProvider(providerToDelete.id);
+      if (response.success) {
         toast.success("Provider deleted successfully");
+        loadProviders(); // Reload from API
         setShowDeleteModal(false);
         setProviderToDelete(null);
       } else {
-        const response = await providerService.deleteProvider(providerToDelete.id);
-        if (response.success) {
-          toast.success("Provider deleted successfully");
-          loadProviders();
-          setShowDeleteModal(false);
-          setProviderToDelete(null);
-        } else {
-          toast.error(response.message || "Failed to delete provider");
-        }
+        toast.error(response.message || "Failed to delete provider");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to delete provider");
@@ -565,7 +486,7 @@ export default function ProviderManagement() {
             setShowEditModal(false);
             setEditingProvider(null);
           }}
-          onSave={(data) => handleUpdateProvider(editingProvider.id, data)}
+          onSave={(data) => handleUpdateProvider(editingProvider.id, { ...data, id: editingProvider.id })}
           saving={updating}
           submitLabel="Update"
         />
