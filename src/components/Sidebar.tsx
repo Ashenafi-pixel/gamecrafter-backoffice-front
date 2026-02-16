@@ -26,7 +26,6 @@ import {
   DollarSign,
   Building2,
   Trophy,
-  Gift,
   Layers,
 } from "lucide-react";
 import gamecrafterLogo from "../assets/game_crafter-logo.png";
@@ -61,11 +60,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
 
     const allowedPaths = new Set(user.allowedPages.map((page) => page.path));
-
-    // If player management is allowed, also allow welcome bonus
-    if (allowedPaths.has("/players")) {
-      allowedPaths.add("/welcome-bonus");
-    }
 
     // If player metrics report is allowed, also allow affiliate report
     if (allowedPaths.has("/reports/player-metrics")) {

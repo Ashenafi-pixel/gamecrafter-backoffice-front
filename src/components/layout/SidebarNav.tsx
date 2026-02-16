@@ -7,7 +7,6 @@ import {
   Gamepad2,
   Activity,
   Receipt,
-  Gift,
   FileText,
   ShieldAlert,
   Plug,
@@ -46,7 +45,6 @@ const ENTERPRISE_NAV: NavItem[] = [
       { label: "Deposits", path: "/transactions/deposits" },
     ],
   },
-  { key: "bonusing", label: "Bonusing", path: "/welcome-bonus", icon: Gift },
   {
     key: "reports",
     label: "Reports",

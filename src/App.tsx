@@ -22,7 +22,6 @@ import { BrandReport } from "./components/reports/BrandReport";
 import ProviderManagement from "./components/providerManagement/ProviderManagement";
 import { ReportsManagement } from "./components/reports/ReportsManagement";
 import { PlayerManagement } from "./components/players/PlayerManagement";
-import { WelcomeBonusManagement } from "./components/welcomeBonus/WelcomeBonusManagement";
 import { CashbackManagement } from "./components/cashback/CashbackManagement";
 import { TransactionManagement } from "./components/transactions/TransactionManagement";
 import { GamingTransactions } from "./components/transactions/GamingTransactions";
@@ -221,16 +220,6 @@ const ProtectedApp: React.FC = () => {
                 <ProtectedRoute
                   path="/players"
                   element={<PlayerManagement />}
-                  allowedPages={user?.allowedPages}
-                />
-              }
-            />
-            <Route
-              path="/welcome-bonus"
-              element={
-                <ProtectedRoute
-                  path="/welcome-bonus"
-                  element={<WelcomeBonusManagement />}
                   allowedPages={user?.allowedPages}
                 />
               }
