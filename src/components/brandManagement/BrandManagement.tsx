@@ -1,38 +1,27 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  RefreshCw,
+  X,
+  Building2,
+  CheckCircle2,
+  XCircle,
+  MoreVertical,
+  Eye,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
+  brandService,
   Brand,
   CreateBrandRequest,
   UpdateBrandRequest,
+  GetBrandsRequest,
 } from "../../services/brandService";
 
-// Mock data only – no API calls
-function getMockBrands(): Brand[] {
-  const now = new Date().toISOString();
-  const names = [
-    "Royal Casino", "Lucky Spins", "Grand Slots", "Ace Gaming", "Diamond Bet",
-    "Crown Play", "Golden Reel", "Platinum Casino", "Star Vegas", "Elite Gaming",
-  ];
-  const codes = ["RC", "LS", "GS", "AG", "DB", "CP", "GR", "PC", "SV", "EG"];
-  const types = ["API", "Aggregator", "Direct"];
-  return names.map((name, i) => ({
-    id: `mock-brand-${i + 1}`,
-    name,
-    code: codes[i],
-    domain: `${codes[i].toLowerCase()}.gamecrafter.io`,
-    description: `${name} integration for GameCrafter backoffice.`,
-    api_url: `https://api.${codes[i].toLowerCase()}.example.com/v1`,
-    webhook_url: `https://webhooks.${codes[i].toLowerCase()}.example.com/events`,
-    integration_type: types[i % 3],
-    is_active: i % 3 !== 2,
-    created_at: now,
-    updated_at: now,
-  }));
-}
-
 const BrandManagement: React.FC = () => {
-  const [allBrands, setAllBrands] = useState<Brand[]>(() => getMockBrands());
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -46,6 +35,7 @@ const BrandManagement: React.FC = () => {
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [viewingBrand, setViewingBrand] = useState<Brand | null>(null);
   const [brandToDelete, setBrandToDelete] = useState<Brand | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(
     undefined,
@@ -68,39 +58,52 @@ const BrandManagement: React.FC = () => {
     integration_type: "API",
     is_active: true,
   });
+  const [showSignatureInput, setShowSignatureInput] = useState(false);
+  const [signature, setSignature] = useState("");
 
-  const loadBrands = useCallback(() => {
+  const loadBrands = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const filtered = allBrands.filter((b) => {
-      const matchSearch =
-        !searchTerm ||
-        b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.code.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchActive =
-        isActiveFilter === undefined || b.is_active === isActiveFilter;
-      return matchSearch && matchActive;
-    });
-    const total = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / pagination.perPage));
-    const page = Math.min(pagination.page, totalPages);
-    const start = (page - 1) * pagination.perPage;
-    const pageBrands = filtered.slice(start, start + pagination.perPage);
-    setBrands(pageBrands);
+    try {
+      const params: GetBrandsRequest = {
+        page: pagination.page,
+        "per-page": pagination.perPage,
+        ...(searchTerm && { search: searchTerm }),
+        ...(isActiveFilter !== undefined && { is_active: isActiveFilter }),
+      };
+
+      const response = await brandService.getBrands(params);
+
+      if (response.success && response.data) {
+        setBrands(response.data.brands || []);
         setPagination((prev) => ({
           ...prev,
-      total,
-      totalPages,
-      currentPage: page,
-    }));
+          total: response.data!.total_count,
+          totalPages: response.data!.total_pages,
+          currentPage: response.data!.current_page,
+          perPage: response.data!.per_page,
+        }));
+      } else {
+        const errorMessage = response.message || "Failed to load brands";
+        setError(errorMessage);
+        setBrands([]);
+        toast.error(errorMessage);
+      }
+    } catch (err: any) {
+      const errorMessage = err.message || "Failed to load brands";
+      setError(errorMessage);
+      setBrands([]);
+      toast.error(errorMessage);
+    } finally {
       setLoading(false);
-  }, [allBrands, pagination.page, pagination.perPage, searchTerm, isActiveFilter]);
+    }
+  }, [pagination.page, pagination.perPage, searchTerm, isActiveFilter]);
 
   useEffect(() => {
     loadBrands();
   }, [loadBrands]);
 
-  const handleCreateBrand = () => {
+  const handleCreateBrand = async () => {
     if (creating) return;
 
     if (!newBrand.name || !newBrand.code) {
@@ -109,52 +112,72 @@ const BrandManagement: React.FC = () => {
     }
 
     setCreating(true);
-    const now = new Date().toISOString();
-    const brand: Brand = {
-      id: `mock-brand-${Date.now()}`,
-      name: newBrand.name,
-      code: newBrand.code,
-      domain: newBrand.domain,
-      description: newBrand.description,
-      api_url: newBrand.api_url,
-      webhook_url: newBrand.webhook_url,
-      integration_type: newBrand.integration_type ?? "API",
-      is_active: newBrand.is_active ?? true,
-      created_at: now,
-      updated_at: now,
-    };
-    setAllBrands((prev) => [...prev, brand]);
+    try {
+      const brandData: CreateBrandRequest = {
+        ...newBrand,
+        ...(showSignatureInput && signature ? { signature } : {}),
+      };
+      const response = await brandService.createBrand(brandData);
+      if (response.success) {
         toast.success("Brand created successfully");
         setShowCreateModal(false);
         setNewBrand({
           name: "",
           code: "",
           domain: "",
-      description: "",
-      api_url: "",
-      webhook_url: "",
-      integration_type: "API",
+          description: "",
+          api_url: "",
+          webhook_url: "",
+          integration_type: "API",
           is_active: true,
         });
+        setShowSignatureInput(false);
+        setSignature("");
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to create brand");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create brand");
+    } finally {
       setCreating(false);
+    }
   };
 
-  const handleUpdateBrand = () => {
+  const handleUpdateBrand = async () => {
     if (!editingBrand || updating) return;
 
     setUpdating(true);
-    const updated: Brand = {
-      ...editingBrand,
-      updated_at: new Date().toISOString(),
-    };
-    setAllBrands((prev) =>
-      prev.map((b) => (b.id === editingBrand.id ? updated : b)),
-    );
+    try {
+      const updateData: UpdateBrandRequest = {
+        name: editingBrand.name,
+        code: editingBrand.code,
+        domain: editingBrand.domain,
+        description: editingBrand.description,
+        api_url: editingBrand.api_url,
+        webhook_url: editingBrand.webhook_url,
+        integration_type: editingBrand.integration_type,
+        is_active: editingBrand.is_active,
+      };
+
+      const response = await brandService.updateBrand(
+        editingBrand.id,
+        updateData,
+      );
+
+      if (response.success) {
         toast.success("Brand updated successfully");
         setShowEditModal(false);
         setEditingBrand(null);
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to update brand");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update brand");
+    } finally {
       setUpdating(false);
-    setTimeout(loadBrands, 0);
+    }
   };
 
   const handleDeleteBrand = (brand: Brand) => {
@@ -162,15 +185,25 @@ const BrandManagement: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const confirmDeleteBrand = () => {
+  const confirmDeleteBrand = async () => {
     if (!brandToDelete || deleting) return;
 
     setDeleting(true);
-    setAllBrands((prev) => prev.filter((b) => b.id !== brandToDelete.id));
+    try {
+      const response = await brandService.deleteBrand(brandToDelete.id);
+      if (response.success) {
         toast.success("Brand deleted successfully");
         setShowDeleteModal(false);
         setBrandToDelete(null);
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to delete brand");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete brand");
+    } finally {
       setDeleting(false);
+    }
   };
 
   const handleEditClick = (brand: Brand) => {
@@ -178,9 +211,36 @@ const BrandManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
+  const toggleDropdown = (id: string) => {
+    setActiveDropdown(activeDropdown === id ? null : id);
+  };
+
+  const closeDropdown = () => {
+    setActiveDropdown(null);
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        activeDropdown &&
+        !(event.target as Element).closest(".dropdown-container")
+      ) {
+        closeDropdown();
+      }
+    };
+
+    if (activeDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [activeDropdown]);
 
   const activeCount = brands.filter((b) => b.is_active).length;
   const inactiveCount = brands.length - activeCount;
@@ -358,31 +418,50 @@ const BrandManagement: React.FC = () => {
                         {new Date(brand.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-1">
+                        <div className="relative dropdown-container flex justify-end">
                           <button
-                            onClick={() => {
-                              setViewingBrand(brand);
-                              setShowViewModal(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="View details"
+                            onClick={() => toggleDropdown(brand.id)}
+                            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors"
+                            title="Actions"
                           >
-                            <FileText className="w-4 h-4" />
+                            <MoreVertical className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleEditClick(brand)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBrand(brand)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+
+                          {activeDropdown === brand.id && (
+                            <div className="absolute right-0 mt-1 w-48 bg-slate-800/95 border border-slate-700 rounded-xl shadow-xl z-50 py-1 backdrop-blur-sm">
+                              <button
+                                onClick={() => {
+                                  setViewingBrand(brand);
+                                  setShowViewModal(true);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                              >
+                                <Eye className="h-4 w-4 mr-3" />
+                                View Details
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleEditClick(brand);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                              >
+                                <Edit className="h-4 w-4 mr-3" />
+                                Edit Brand
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDeleteBrand(brand);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-slate-700/80 hover:text-red-300 transition-colors"
+                              >
+                                <Trash2 className="h-4 w-4 mr-3" />
+                                Delete Brand
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -502,6 +581,34 @@ const BrandManagement: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
+                    id="create-show-signature"
+                    checked={showSignatureInput}
+                    onChange={(e) => {
+                      setShowSignatureInput(e.target.checked);
+                      if (!e.target.checked) {
+                        setSignature("");
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-red-600 focus:ring-red-500/20 focus:ring-2"
+                  />
+                  <label htmlFor="create-show-signature" className="text-sm text-slate-300">Add Signature</label>
+                </div>
+                {showSignatureInput && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Signature *</label>
+                    <input
+                      type="text"
+                      value={signature}
+                      onChange={(e) => setSignature(e.target.value)}
+                      placeholder="Enter signature"
+                      className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                      required={showSignatureInput}
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
                     id="create-is_active"
                     checked={newBrand.is_active}
                     onChange={(e) => setNewBrand((prev) => ({ ...prev, is_active: e.target.checked }))}
@@ -512,7 +619,11 @@ const BrandManagement: React.FC = () => {
               </div>
               <div className="p-6 border-t border-slate-700/80 flex justify-end gap-3">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setShowSignatureInput(false);
+                    setSignature("");
+                  }}
                   className="px-4 py-2.5 bg-slate-700/80 text-white rounded-xl hover:bg-slate-700 border border-slate-600/50 transition-colors font-medium"
                 >
                   Cancel
