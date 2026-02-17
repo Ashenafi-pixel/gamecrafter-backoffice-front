@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   MOCK_DASHBOARD_KPIS,
   MOCK_RECENT_TRANSACTIONS,
@@ -30,10 +30,10 @@ const formatNumber = (n: number) => new Intl.NumberFormat("en-US").format(n);
 const formatPercent = (n: number) => `${n.toFixed(1)}%`;
 
 export function Dashboard() {
-  const [kpis] = useState(MOCK_DASHBOARD_KPIS);
   const [loading, setLoading] = useState(true);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesResponse["data"] | null>(null);
   const [tableRows, setTableRows] = useState<DailyReportDataTableRow[]>([]);
+  const [totals, setTotals] = useState<DailyReportDataTableRow | null>(null);
   const [timeSeriesError, setTimeSeriesError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,9 +41,10 @@ export function Dashboard() {
     const start = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     setLoading(true);
     try {
-      const { rows, timeSeries } = getMockDashboardData(start, today, false);
+      const { rows, timeSeries, totals: rangeTotals } = getMockDashboardData(start, today, false);
       setTableRows(rows);
       setTimeSeriesData(timeSeries);
+      setTotals(rangeTotals);
       setTimeSeriesError(null);
     } catch (e) {
       setTimeSeriesError((e as Error).message);
@@ -51,6 +52,23 @@ export function Dashboard() {
       setLoading(false);
     }
   }, []);
+
+  const kpis = useMemo(() => {
+    const fallback = MOCK_DASHBOARD_KPIS;
+    if (!totals) return fallback;
+    const bet = parseFloat(totals.bet_amount || "0") || 0;
+    const win = parseFloat(totals.win_amount || "0") || 0;
+    const ggr = parseFloat(totals.ggr || "0") || 0;
+    return {
+      totalBet: bet,
+      totalWin: win,
+      ggr,
+      ngr: fallback.ngr,
+      activePlayers: totals.active_users ?? fallback.activePlayers,
+      openSessions: fallback.openSessions,
+      avgRtp: fallback.avgRtp,
+    };
+  }, [totals]);
 
   const kpiItems = [
     { label: "Total Bet", value: formatCurrency(kpis.totalBet) },

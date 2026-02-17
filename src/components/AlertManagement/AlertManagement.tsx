@@ -35,12 +35,15 @@ import {
   Save,
   RefreshCw,
   UserPlus,
+  Sliders,
+  History,
+  Mail,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminActivityLogsService } from "../../services/adminActivityLogsService";
 
 const AlertManagement: React.FC = () => {
-  const { isAuthenticated, authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<
     "configurations" | "triggers" | "email-groups"
   >("configurations");
@@ -116,8 +119,18 @@ const AlertManagement: React.FC = () => {
 
   const [editForm, setEditForm] = useState<UpdateAlertConfigurationRequest>({});
 
-  // Email Groups state
-  const [emailGroups, setEmailGroups] = useState<AlertEmailGroup[]>([]);
+  // Sample recipient data (no API) – used for Recipients tab
+  const SAMPLE_EMAIL_GROUPS: AlertEmailGroup[] = [
+    {
+      id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" as AlertEmailGroup["id"],
+      name: "Management",
+      description: "Primary contacts for alert notifications",
+      emails: ["ashenafialemu66@gmail.com", "joshjones612@gmail.com"],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+  const [emailGroups, setEmailGroups] = useState<AlertEmailGroup[]>(SAMPLE_EMAIL_GROUPS);
   const [emailGroupsLoading, setEmailGroupsLoading] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
@@ -277,25 +290,9 @@ const AlertManagement: React.FC = () => {
     }
   };
 
-  // Load email groups
-  const loadEmailGroups = async () => {
-    setEmailGroupsLoading(true);
-    try {
-      const response = await alertService.getAllEmailGroups();
-      if (response && response.success) {
-        // Ensure data is always an array
-        const groups = Array.isArray(response.data) ? response.data : [];
-        setEmailGroups(groups);
-      } else {
-        setEmailGroups([]);
-      }
-    } catch (error) {
-      console.error("Error loading email groups:", error);
-      toast.error("Failed to load email groups");
-      setEmailGroups([]);
-    } finally {
-      setEmailGroupsLoading(false);
-    }
+  // Recipients use sample data only (no API)
+  const loadEmailGroups = () => {
+    setEmailGroups(SAMPLE_EMAIL_GROUPS);
   };
 
   // Load data on component mount and when filters change
@@ -671,19 +668,19 @@ const AlertManagement: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-slate-600 border-t-red-500"></div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="flex items-center justify-center min-h-[40vh]">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Access Denied</h2>
-          <p className="text-gray-400">
-            Please log in to access the alert management system.
+          <h2 className="text-2xl font-bold text-white mb-4">Access denied</h2>
+          <p className="text-slate-400">
+            Sign in to manage notification rules.
           </p>
         </div>
       </div>
@@ -692,87 +689,91 @@ const AlertManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <div className="flex items-center justify-between">
+        {/* Page header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-lg shadow-black/20">
+              <Bell className="h-6 w-6 text-red-500" />
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                <Bell className="h-8 w-8 text-blue-500" />
-                Alert Management
+              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                Notification rules
               </h1>
-              <p className="text-gray-400 mt-2">
-                Configure and monitor system alerts for betting, deposits,
-                withdrawals, and GGR.
+              <p className="mt-1 text-sm text-slate-400 max-w-xl">
+                Define rules and monitor triggers for betting, deposits, withdrawals, and GGR.
               </p>
             </div>
-            <button
-              onClick={async () => {
-                await loadEmailGroups();
-                setShowCreateModal(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Create Alert
-            </button>
           </div>
+          <button
+            onClick={async () => {
+              await loadEmailGroups();
+              setShowCreateModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-2.5 text-sm font-medium text-white shadow-md transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <Plus className="h-4 w-4" />
+            Create rule
+          </button>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6">
-          <div className="border-b border-gray-700">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab("configurations")}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "configurations"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600"
-                }`}
-              >
-                Alert Configurations ({configurations.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("triggers")}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "triggers"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600"
-                }`}
-              >
-                Alert Triggers ({triggers.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("email-groups")}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === "email-groups"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600"
-                }`}
-              >
-                Email Groups ({emailGroups.length})
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        {/* Configurations Tab */}
-        {activeTab === "configurations" && (
-          <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            {/* Configurations Header */}
-            <div className="px-6 py-4 border-b border-gray-700">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-medium text-white">
-                  Alert Configurations
+        <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/95 shadow-xl shadow-black/10 flex flex-col md:flex-row min-h-[520px] backdrop-blur-sm">
+          <aside className="w-full md:w-56 lg:w-64 border-b md:border-b-0 md:border-r border-slate-700/80 bg-slate-800/30">
+            <nav className="p-3 space-y-6" aria-label="Notification rules sections">
+              <div>
+                <h2 className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Rules & notifications
                 </h2>
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => setActiveTab("configurations")}
+                    className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                      activeTab === "configurations"
+                        ? "bg-red-500/15 text-red-500"
+                        : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                    }`}
+                  >
+                    <Sliders className="h-4 w-4 shrink-0" />
+                    Rules ({configurations.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("triggers")}
+                    className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                      activeTab === "triggers"
+                        ? "bg-red-500/15 text-red-500"
+                        : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                    }`}
+                  >
+                    <History className="h-4 w-4 shrink-0" />
+                    Trigger history ({triggers.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("email-groups")}
+                    className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors ${
+                      activeTab === "email-groups"
+                        ? "bg-red-500/15 text-red-500"
+                        : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                    }`}
+                  >
+                    <Mail className="h-4 w-4 shrink-0" />
+                    Recipients ({emailGroups.length})
+                  </button>
+                </div>
               </div>
+            </nav>
+          </aside>
 
-              {/* Filters */}
-              <div className="mt-4 flex flex-wrap gap-4">
-                <div className="relative min-w-0 flex-1">
+          <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
+        {activeTab === "configurations" && (
+          <div className="flex flex-col h-full">
+            <div className="shrink-0 border-b border-slate-700/80 bg-slate-800/30 px-4 py-4 sm:px-6">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">
+                Rules
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                <div className="relative min-w-0 flex-1 min-w-[200px]">
                   <input
                     type="text"
-                    placeholder="Search configurations..."
+                    placeholder="Search rules..."
                     value={configurationsFilters.search || ""}
                     onChange={(e) =>
                       setConfigurationsFilters({
@@ -781,11 +782,11 @@ const AlertManagement: React.FC = () => {
                         page: 1,
                       })
                     }
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-2 bg-slate-950/60 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   />
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 </div>
-                <div className="relative min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1 min-w-[160px]">
                   <select
                     value={configurationsFilters.alert_type || ""}
                     onChange={(e) =>
@@ -795,9 +796,9 @@ const AlertManagement: React.FC = () => {
                         page: 1,
                       })
                     }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   >
-                    <option value="">All Types</option>
+                    <option value="">All types</option>
                     {alertTypes.map((type) => (
                       <option key={type.value} value={type.value}>
                         {type.label}
@@ -805,7 +806,7 @@ const AlertManagement: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div className="relative min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1 min-w-[140px]">
                   <select
                     value={configurationsFilters.status || ""}
                     onChange={(e) =>
@@ -815,9 +816,9 @@ const AlertManagement: React.FC = () => {
                         page: 1,
                       })
                     }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   >
-                    <option value="">All Statuses</option>
+                    <option value="">All statuses</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                     <option value="triggered">Triggered</option>
@@ -826,43 +827,45 @@ const AlertManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* Configurations Table */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700">
+            <div className="flex-1 overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-700/80">
+                <thead className="bg-slate-800/40">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
                       Name
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
                       Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
                       Threshold
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Time Window
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
+                      Time window
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 sm:px-6">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                <tbody className="divide-y divide-slate-700/60 bg-slate-900/30">
                   {configurationsLoading ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                      <td colSpan={6} className="px-4 py-12 text-center sm:px-6">
+                        <div className="inline-flex items-center gap-2 text-slate-400">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-red-500" />
+                          <span className="text-sm">Loading rules…</span>
+                        </div>
                       </td>
                     </tr>
                   ) : configurationsError ? (
                     <tr>
                       <td
                         colSpan={6}
-                        className="px-6 py-4 text-center text-red-400"
+                        className="px-4 py-8 text-center text-sm text-red-400 sm:px-6"
                       >
                         {configurationsError}
                       </td>
@@ -871,91 +874,84 @@ const AlertManagement: React.FC = () => {
                     <tr>
                       <td
                         colSpan={6}
-                        className="px-6 py-4 text-center text-gray-400"
+                        className="px-4 py-12 text-center text-sm text-slate-400 sm:px-6"
                       >
                         {configurationsFilters.search ||
                         configurationsFilters.alert_type ||
                         configurationsFilters.status
-                          ? "No alert configurations match your filters"
-                          : "No alert configurations found"}
+                          ? "No rules match your filters."
+                          : "No rules yet. Create one to get started."}
                       </td>
                     </tr>
                   ) : (
                     (configurations || []).map((config) => (
                       <tr
                         key={config.id}
-                        className="hover:bg-gray-700 transition-colors"
+                        className="transition-colors hover:bg-slate-800/40"
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-4 py-3.5 sm:px-6">
                           <div>
                             <div className="text-sm font-medium text-white">
                               {config.name}
                             </div>
                             {config.description && (
-                              <div className="text-sm text-gray-400">
+                              <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
                                 {config.description}
                               </div>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">
-                            {alertService.getAlertTypeLabel(config.alert_type)}
-                          </div>
+                        <td className="whitespace-nowrap px-4 py-3.5 text-sm text-slate-200 sm:px-6">
+                          {alertService.getAlertTypeLabel(config.alert_type)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">
-                            {alertService.formatCurrency(
-                              config.threshold_amount,
-                              config.currency_code || "USD",
-                            )}
-                          </div>
+                        <td className="whitespace-nowrap px-4 py-3.5 text-sm text-slate-200 sm:px-6">
+                          {alertService.formatCurrency(
+                            config.threshold_amount,
+                            config.currency_code || "USD",
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">
-                            {alertService.formatTimeWindow(
-                              config.time_window_minutes,
-                            )}
-                          </div>
+                        <td className="whitespace-nowrap px-4 py-3.5 text-sm text-slate-200 sm:px-6">
+                          {alertService.formatTimeWindow(
+                            config.time_window_minutes,
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-4 py-3.5 sm:px-6">
                           <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${alertService.getStatusColor(config.status)}`}
+                            className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${alertService.getStatusColor(config.status)}`}
                           >
                             {config.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="relative config-dropdown">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-right sm:px-6">
+                          <div className="relative config-dropdown inline-block">
                             <button
                               onClick={() => setSelectedConfiguration(config)}
-                              className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 transition-colors"
+                              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700/60 hover:text-white"
+                              aria-label="Actions"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </button>
                             {selectedConfiguration?.id === config.id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg z-10 border border-gray-600">
-                                <div className="py-1">
-                                  <button
-                                    onClick={() => {
-                                      handleEditConfiguration(config);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-                                  >
-                                    <Edit className="h-4 w-4 mr-3" />
-                                    Edit Configuration
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      handleDeleteConfiguration(config.id);
-                                      setSelectedConfiguration(null);
-                                    }}
-                                    className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-600 hover:text-red-300 transition-colors"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-3" />
-                                    Delete Configuration
-                                  </button>
-                                </div>
+                              <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-slate-700/80 bg-slate-800 py-1 shadow-xl">
+                                <button
+                                  onClick={() => {
+                                    handleEditConfiguration(config);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700/60 hover:text-white"
+                                >
+                                  <Edit className="h-4 w-4 shrink-0" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDeleteConfiguration(config.id);
+                                    setSelectedConfiguration(null);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 transition hover:bg-slate-700/60 hover:text-red-300"
+                                >
+                                  <Trash2 className="h-4 w-4 shrink-0" />
+                                  Delete
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1008,18 +1004,13 @@ const AlertManagement: React.FC = () => {
 
         {/* Triggers Tab */}
         {activeTab === "triggers" && (
-          <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            {/* Triggers Header */}
-            <div className="px-6 py-4 border-b border-gray-700">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-medium text-white">
-                  Alert Triggers
-                </h2>
-              </div>
-
-              {/* Filters */}
-              <div className="mt-4 flex flex-wrap gap-4">
-                <div className="relative min-w-0 flex-1">
+          <div>
+            <div className="px-6 py-4 border-b border-slate-700/80">
+              <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-4">
+                Trigger history
+              </h3>
+              <div className="flex flex-wrap gap-4">
+                <div className="relative min-w-0 flex-1 min-w-[200px]">
                   <input
                     type="text"
                     placeholder="Search triggers..."
@@ -1263,158 +1254,74 @@ const AlertManagement: React.FC = () => {
 
         {/* Email Groups Tab */}
         {activeTab === "email-groups" && (
-          <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1">
-                    Email Groups
-                  </h2>
-                  <p className="text-sm text-gray-400">
-                    Manage email groups for alert notifications
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setCreateGroupForm({
-                      name: "",
-                      description: "",
-                      emails: [""],
-                    });
-                    setShowCreateGroupModal(true);
-                  }}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-lg flex items-center gap-2 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
-                >
-                  <Plus className="h-5 w-5" />
-                  <span className="font-medium">Create Group</span>
-                </button>
+          <div className="p-6">
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  Recipients
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Email groups for alert notifications
+                </p>
               </div>
 
-              {emailGroupsLoading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                  <p className="text-gray-400">Loading email groups...</p>
-                </div>
-              ) : !Array.isArray(emailGroups) || emailGroups.length === 0 ? (
-                <div className="text-center py-12 bg-gray-700/50 rounded-lg border-2 border-dashed border-gray-600">
-                  <Users className="h-12 w-12 text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-400 text-lg mb-2">
-                    No email groups found
-                  </p>
-                  <p className="text-gray-500 text-sm mb-4">
-                    Create your first email group to get started
-                  </p>
-                  <button
-                    onClick={() => {
-                      setCreateGroupForm({
-                        name: "",
-                        description: "",
-                        emails: [""],
-                      });
-                      setShowCreateGroupModal(true);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create Group
-                  </button>
+              {!Array.isArray(emailGroups) || emailGroups.length === 0 ? (
+                <div className="rounded-2xl border border-slate-700/80 bg-slate-800/30 p-12 text-center">
+                  <Mail className="h-14 w-14 text-slate-500 mx-auto mb-4" />
+                  <p className="text-slate-400 text-lg mb-2">No recipients</p>
+                  <p className="text-slate-500 text-sm">Sample recipients will appear here.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-4">
                   {(emailGroups || []).map((group) => (
                     <div
                       key={group.id}
-                      className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl p-5 border border-gray-600 hover:border-blue-500 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                      className="rounded-2xl border border-slate-700/80 bg-slate-800/40 overflow-hidden transition-colors hover:border-slate-600/80"
                     >
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-                            <Users className="h-5 w-5 text-blue-400" />
-                            {group.name}
-                          </h3>
-                          {group.description && (
-                            <p className="text-sm text-gray-400 mt-1 line-clamp-2">
-                              {group.description}
+                      <div className="flex flex-col sm:flex-row sm:items-stretch">
+                        <div className="flex items-center gap-4 p-5 sm:p-6 sm:border-r border-slate-700/80 sm:w-52 shrink-0">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+                            <Users className="h-6 w-6 text-red-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-base font-semibold text-white truncate">
+                              {group.name}
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {group.emails?.length ?? 0} recipient{group.emails?.length !== 1 ? "s" : ""}
                             </p>
+                          </div>
+                        </div>
+                        <div className="flex-1 p-5 sm:p-6">
+                          {group.description && (
+                            <p className="text-sm text-slate-400 mb-4">{group.description}</p>
                           )}
-                        </div>
-                      </div>
-
-                      <div className="mb-4 bg-gray-800/50 rounded-lg p-3 border border-gray-600">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Emails ({group.emails?.length || 0})
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
-                          {group.emails && group.emails.length > 0 ? (
-                            <>
-                              {group.emails.slice(0, 3).map((email, idx) => (
-                                <span
+                          <div className="flex flex-col gap-2">
+                            {group.emails && group.emails.length > 0 ? (
+                              group.emails.map((email, idx) => (
+                                <div
                                   key={idx}
-                                  className="text-xs bg-blue-600/20 text-blue-300 px-2.5 py-1 rounded-md border border-blue-500/30 font-medium"
+                                  className="flex items-center gap-3 rounded-xl bg-slate-900/60 border border-slate-700/60 px-4 py-3"
                                 >
-                                  {email}
-                                </span>
-                              ))}
-                              {group.emails.length > 3 && (
-                                <span className="text-xs text-gray-400 bg-gray-700 px-2.5 py-1 rounded-md border border-gray-600">
-                                  +{group.emails.length - 3} more
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-gray-500 italic">
-                              No emails added
-                            </span>
-                          )}
+                                  <Mail className="h-4 w-4 text-slate-500 shrink-0" />
+                                  <span className="text-sm font-medium text-slate-200 truncate">
+                                    {email}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-slate-500 italic">No emails</p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-3 border-t border-gray-600">
-                        <button
-                          onClick={() => {
-                            setSelectedGroup(group);
-                            setEditGroupForm({
-                              name: group.name,
-                              description: group.description || "",
-                              emails:
-                                group.emails && group.emails.length > 0
-                                  ? [...group.emails]
-                                  : [""],
-                            });
-                            setShowEditGroupModal(true);
-                          }}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
-                        >
-                          <Edit className="h-4 w-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteGroup(group.id)}
-                          disabled={deletingGroup === group.id}
-                          className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {deletingGroup === group.id ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                              Deleting...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </>
-                          )}
-                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
           </div>
         )}
+          </div>
+        </div>
 
         {/* Create Configuration Modal */}
         {showCreateModal && (

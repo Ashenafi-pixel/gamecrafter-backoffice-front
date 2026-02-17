@@ -18,6 +18,7 @@
   --border-strong: rgba(255, 255, 255, 0.1);
   --radius-card: 6px;
   --radius-button: 6px;
+  --radius-input: 6px;
 }
 
 @layer base {

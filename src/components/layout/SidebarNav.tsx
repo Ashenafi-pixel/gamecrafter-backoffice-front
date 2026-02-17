@@ -7,8 +7,6 @@ import {
   Gamepad2,
   Activity,
   Receipt,
-  Wallet,
-  Gift,
   FileText,
   ShieldAlert,
   Plug,
@@ -48,17 +46,6 @@ const ENTERPRISE_NAV: NavItem[] = [
     ],
   },
   {
-    key: "wallets",
-    label: "Wallets",
-    path: "/wallet/management",
-    icon: Wallet,
-    children: [
-      { label: "Wallet management", path: "/wallet/management" },
-      { label: "Withdrawal dashboard", path: "/transactions/withdrawals/dashboard" },
-    ],
-  },
-  { key: "bonusing", label: "Bonusing", path: "/welcome-bonus", icon: Gift },
-  {
     key: "reports",
     label: "Reports",
     path: "/reports",
@@ -78,8 +65,8 @@ const ENTERPRISE_NAV: NavItem[] = [
     path: "/kyc-risk",
     icon: ShieldAlert,
     children: [
-      { label: "KYC Risk", path: "/kyc-risk" },
-      { label: "Alerts", path: "/admin/alerts" },
+      { label: "Compliance & risk", path: "/kyc-risk" },
+      { label: "Notification rules", path: "/admin/alerts" },
     ],
   },
   { key: "integrations", label: "Integrations", path: "/settings", icon: Plug },
@@ -139,7 +126,7 @@ export function SidebarNav({ isMobileOpen, onCloseMobile, collapsed = false, onT
 
   const allowedPaths = new Set(
     user?.allowedPages?.length
-      ? user.allowedPages.flatMap((p) => [p.path, "/reports", "/transactions/gaming", "/transactions/details", "/wallet/management"])
+      ? user.allowedPages.flatMap((p) => [p.path, "/reports", "/transactions/gaming", "/transactions/details"])
       : ENTERPRISE_NAV.flatMap((n) => [n.path, ...(n.children?.map((c) => c.path) ?? [])])
   );
   const navItems = user?.allowedPages?.length

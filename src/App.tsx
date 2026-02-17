@@ -22,7 +22,6 @@ import { BrandReport } from "./components/reports/BrandReport";
 import ProviderManagement from "./components/providerManagement/ProviderManagement";
 import { ReportsManagement } from "./components/reports/ReportsManagement";
 import { PlayerManagement } from "./components/players/PlayerManagement";
-import { WelcomeBonusManagement } from "./components/welcomeBonus/WelcomeBonusManagement";
 import { CashbackManagement } from "./components/cashback/CashbackManagement";
 import { TransactionManagement } from "./components/transactions/TransactionManagement";
 import { GamingTransactions } from "./components/transactions/GamingTransactions";
@@ -35,7 +34,6 @@ import { KYCManagementPage } from "./components/kyc/KYCManagementPage";
 import { WithdrawalManagement } from "./components/transactions/WithdrawalManagement";
 import WithdrawalDashboard from "./components/WithdrawalDashboard/WithdrawalDashboard";
 import WithdrawalSettings from "./components/WithdrawalSettings/WithdrawalSettings";
-import { WalletManagement } from "./components/wallet/WalletManagement";
 import { ServicesProvider } from "./contexts/ServicesContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SidebarProvider, useSidebar } from "./contexts/SidebarContext";
@@ -227,16 +225,6 @@ const ProtectedApp: React.FC = () => {
               }
             />
             <Route
-              path="/welcome-bonus"
-              element={
-                <ProtectedRoute
-                  path="/welcome-bonus"
-                  element={<WelcomeBonusManagement />}
-                  allowedPages={user?.allowedPages}
-                />
-              }
-            />
-            <Route
               path="/cashback"
               element={
                 <ProtectedRoute
@@ -333,16 +321,6 @@ const ProtectedApp: React.FC = () => {
                 <ProtectedRoute
                   path="/transactions/manual-funds"
                   element={<ManualFundManagement />}
-                  allowedPages={user?.allowedPages}
-                />
-              }
-            />
-            <Route
-              path="/wallet/management"
-              element={
-                <ProtectedRoute
-                  path="/wallet/management"
-                  element={<WalletManagement />}
                   allowedPages={user?.allowedPages}
                 />
               }

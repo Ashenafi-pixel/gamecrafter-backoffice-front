@@ -8,6 +8,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Prevent FOUC: body stays hidden until app has mounted and styles are applied -->
+    <style>
+      html:not(.app-ready) body { opacity: 0; }
+      html.app-ready body { opacity: 1; transition: opacity 0.12s ease-out; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

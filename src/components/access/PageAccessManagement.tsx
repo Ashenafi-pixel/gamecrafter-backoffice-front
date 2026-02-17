@@ -287,37 +287,35 @@ export const PageAccessManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-white">
-            Page Access Management
-          </h3>
-          <p className="text-sm text-gray-400 mt-1">
-            Manage which pages users or roles can access
-          </p>
+      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
+          <div>
+            <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+              Page access
+            </h3>
+            <p className="text-slate-400 text-sm mt-0.5">
+              Manage which pages users or roles can access
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (accessMode === "user") loadAdminUsers();
+              else loadRoles();
+            }}
+            disabled={loading || rolesLoading}
+            className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw
+              className={`h-5 w-5 ${loading || rolesLoading ? "animate-spin" : ""}`}
+            />
+          </button>
         </div>
-        <button
-          onClick={() => {
-            if (accessMode === "user") {
-              loadAdminUsers();
-            } else {
-              loadRoles();
-            }
-          }}
-          disabled={loading || rolesLoading}
-          className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center space-x-2"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${loading || rolesLoading ? "animate-spin" : ""}`}
-          />
-          <span>Refresh</span>
-        </button>
-      </div>
-
+        <div className="p-4 md:p-6 space-y-6">
       {/* Mode Selection */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <label className="block text-sm font-medium text-gray-300 mb-3">
-          Access Mode
+      <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+        <label className="block text-sm font-medium text-slate-400 mb-3">
+          Access mode
         </label>
         <div className="flex gap-4">
           <button
@@ -327,14 +325,14 @@ export const PageAccessManagement: React.FC = () => {
               setSelectedRole(null);
               setSelectedPageIds(new Set());
             }}
-            className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center space-x-2 ${
+            className={`flex-1 px-4 py-3 rounded-xl border-2 transition-colors flex items-center justify-center gap-2 ${
               accessMode === "user"
-                ? "border-purple-500 bg-purple-500/20 text-purple-400"
-                : "border-gray-600 bg-gray-700 text-gray-400 hover:border-gray-500"
+                ? "border-red-500 bg-red-500/15 text-red-500"
+                : "border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500 hover:text-slate-300"
             }`}
           >
             <User className="h-5 w-5" />
-            <span>User-Based</span>
+            <span>User-based</span>
           </button>
           <button
             onClick={() => {
@@ -343,22 +341,22 @@ export const PageAccessManagement: React.FC = () => {
               setSelectedRole(null);
               setSelectedPageIds(new Set());
             }}
-            className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors flex items-center justify-center space-x-2 ${
+            className={`flex-1 px-4 py-3 rounded-xl border-2 transition-colors flex items-center justify-center gap-2 ${
               accessMode === "role"
-                ? "border-purple-500 bg-purple-500/20 text-purple-400"
-                : "border-gray-600 bg-gray-700 text-gray-400 hover:border-gray-500"
+                ? "border-red-500 bg-red-500/15 text-red-500"
+                : "border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500 hover:text-slate-300"
             }`}
           >
             <Shield className="h-5 w-5" />
-            <span>Role-Based</span>
+            <span>Role-based</span>
           </button>
         </div>
       </div>
 
       {/* User/Role Selection */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          {accessMode === "user" ? "Select Admin User" : "Select Role"}
+      <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+        <label className="block text-sm font-medium text-slate-400 mb-2">
+          {accessMode === "user" ? "Select admin user" : "Select role"}
         </label>
         {accessMode === "user" ? (
           <select
@@ -367,7 +365,7 @@ export const PageAccessManagement: React.FC = () => {
               const user = adminUsers.find((u) => u.id === e.target.value);
               setSelectedUser(user || null);
             }}
-            className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+            className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
           >
             <option value="">-- Select a user --</option>
             {adminUsers.map((user) => (
@@ -383,7 +381,7 @@ export const PageAccessManagement: React.FC = () => {
               const role = roles.find((r) => r.id === e.target.value);
               setSelectedRole(role || null);
             }}
-            className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+            className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 disabled:opacity-50"
             disabled={rolesLoading}
           >
             <option value="">-- Select a role --</option>
@@ -400,24 +398,22 @@ export const PageAccessManagement: React.FC = () => {
         ((accessMode === "user" && !selectedUser) ||
           (accessMode === "role" && !selectedRole)) && (
           <div className="text-center py-8">
-            <p className="text-gray-400">Loading...</p>
+            <p className="text-slate-400 text-sm">Loading...</p>
           </div>
         )}
 
       {!loading && accessMode === "user" && adminUsers.length === 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
-          <p className="text-gray-400">
-            No admin users found. Please ensure you have admin users in the
-            system.
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6 text-center">
+          <p className="text-slate-400 text-sm">
+            No admin users found. Please ensure you have admin users in the system.
           </p>
         </div>
       )}
 
       {!rolesLoading && accessMode === "role" && roles.length === 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
-          <p className="text-gray-400">
-            No roles found. Please create roles first in the RBAC Management
-            section.
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6 text-center">
+          <p className="text-slate-400 text-sm">
+            No roles found. Please create roles first in the Roles section.
           </p>
         </div>
       )}
@@ -425,122 +421,94 @@ export const PageAccessManagement: React.FC = () => {
       {((accessMode === "user" && selectedUser) ||
         (accessMode === "role" && selectedRole)) && (
         <>
-          {/* Search and Select All */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search pages..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                 />
               </div>
               <button
                 onClick={handleSelectAll}
-                className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                className="px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium shrink-0"
               >
                 {selectedPageIds.size === filteredPages.length
-                  ? "Deselect All"
-                  : "Select All"}
+                  ? "Deselect all"
+                  : "Select all"}
               </button>
             </div>
 
-            {/* Pages List */}
             <div className="max-h-96 overflow-y-auto space-y-4">
               {pagesLoading ? (
-                <p className="text-gray-400 text-center py-8">
-                  Loading pages...
-                </p>
+                <p className="text-slate-400 text-center py-8 text-sm">Loading pages...</p>
               ) : parentPages.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">
+                <p className="text-slate-400 text-center py-8 text-sm">
                   No pages found. Please run the seed script to populate pages.
                 </p>
               ) : (
                 parentPages.map((parentPage) => {
                   const childPages = getChildPages(parentPage.id);
-                  const allPageIds = [
-                    parentPage.id,
-                    ...childPages.map((cp) => cp.id),
-                  ];
-                  const allSelected = allPageIds.every((id) =>
-                    selectedPageIds.has(id),
-                  );
-                  const someSelected = allPageIds.some((id) =>
-                    selectedPageIds.has(id),
-                  );
+                  const allPageIds = [parentPage.id, ...childPages.map((cp) => cp.id)];
+                  const allSelected = allPageIds.every((id) => selectedPageIds.has(id));
+                  const someSelected = allPageIds.some((id) => selectedPageIds.has(id));
 
                   return (
                     <div
                       key={parentPage.id}
-                      className="border border-gray-700 rounded-lg p-4"
+                      className="border border-slate-700/80 rounded-xl p-4 bg-slate-900/30"
                     >
-                      <div className="flex items-center space-x-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2">
                         <button
                           onClick={() => {
                             if (allSelected) {
-                              allPageIds.forEach((id) =>
-                                selectedPageIds.delete(id),
-                              );
+                              allPageIds.forEach((id) => selectedPageIds.delete(id));
                             } else {
-                              allPageIds.forEach((id) =>
-                                selectedPageIds.add(id),
-                              );
+                              allPageIds.forEach((id) => selectedPageIds.add(id));
                             }
                             setSelectedPageIds(new Set(selectedPageIds));
                           }}
-                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          className={`flex-shrink-0 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-colors ${
                             allSelected
-                              ? "bg-purple-600 border-purple-600"
+                              ? "bg-red-500 border-red-500"
                               : someSelected
-                                ? "bg-purple-600/50 border-purple-600"
-                                : "border-gray-500"
+                                ? "bg-red-500/50 border-red-500"
+                                : "border-slate-500"
                           }`}
                         >
-                          {allSelected && (
-                            <CheckCircle className="h-3 w-3 text-white" />
-                          )}
+                          {allSelected && <CheckCircle className="h-3 w-3 text-white" />}
                         </button>
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <Globe className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium text-white">
-                              {parentPage.label}
-                            </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-4 w-4 text-red-500 shrink-0" />
+                            <span className="font-medium text-white">{parentPage.label}</span>
                           </div>
-                          <span className="text-xs text-gray-400">
-                            {parentPage.path}
-                          </span>
+                          <span className="text-xs text-slate-400">{parentPage.path}</span>
                         </div>
                       </div>
                       {childPages.length > 0 && (
                         <div className="ml-8 mt-2 space-y-2">
                           {childPages.map((childPage) => (
-                            <div
-                              key={childPage.id}
-                              className="flex items-center space-x-3"
-                            >
+                            <div key={childPage.id} className="flex items-center gap-3">
                               <button
                                 onClick={() => handlePageToggle(childPage.id)}
-                                className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center ${
+                                className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
                                   selectedPageIds.has(childPage.id)
-                                    ? "bg-purple-600 border-purple-600"
-                                    : "border-gray-500"
+                                    ? "bg-red-500 border-red-500"
+                                    : "border-slate-500"
                                 }`}
                               >
                                 {selectedPageIds.has(childPage.id) && (
                                   <CheckCircle className="h-2.5 w-2.5 text-white" />
                                 )}
                               </button>
-                              <div className="flex-1">
-                                <span className="text-sm text-gray-300">
-                                  {childPage.label}
-                                </span>
-                                <span className="text-xs text-gray-500 ml-2">
-                                  {childPage.path}
-                                </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm text-slate-300">{childPage.label}</span>
+                                <span className="text-xs text-slate-500 ml-2">{childPage.path}</span>
                               </div>
                             </div>
                           ))}
@@ -552,61 +520,51 @@ export const PageAccessManagement: React.FC = () => {
               )}
             </div>
 
-            {/* Save Button */}
             <div className="mt-6 flex justify-end">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center space-x-2"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium disabled:opacity-50 inline-flex items-center gap-2 shadow-lg shadow-red-500/20"
               >
                 <Save className="h-4 w-4" />
-                <span>{saving ? "Saving..." : "Save Changes"}</span>
+                {saving ? "Saving..." : "Save changes"}
               </button>
             </div>
           </div>
 
-          {/* Current Access Summary */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h4 className="text-sm font-medium text-gray-300 mb-3">
-              Current Access Summary
+          <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+            <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+              Current access summary
             </h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-gray-400 text-sm">Total Pages Selected</p>
-                <p className="text-2xl font-bold text-white">
-                  {selectedPageIds.size}
-                </p>
+                <p className="text-slate-400 text-sm">Total pages selected</p>
+                <p className="text-2xl font-bold text-white">{selectedPageIds.size}</p>
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Total Available Pages</p>
-                <p className="text-2xl font-bold text-white">
-                  {allPages.length}
-                </p>
+                <p className="text-slate-400 text-sm">Total available pages</p>
+                <p className="text-2xl font-bold text-white">{allPages.length}</p>
               </div>
             </div>
             {accessMode === "user" && selectedUser && (
-              <div className="mt-4 pt-4 border-t border-gray-700">
-                <p className="text-gray-400 text-sm">
-                  Managing access for:{" "}
-                  <span className="text-white font-medium">
-                    {selectedUser.username}
-                  </span>
+              <div className="mt-4 pt-4 border-t border-slate-700/80">
+                <p className="text-slate-400 text-sm">
+                  Managing access for: <span className="text-white font-medium">{selectedUser.username}</span>
                 </p>
               </div>
             )}
             {accessMode === "role" && selectedRole && (
-              <div className="mt-4 pt-4 border-t border-gray-700">
-                <p className="text-gray-400 text-sm">
-                  Managing access for role:{" "}
-                  <span className="text-white font-medium">
-                    {selectedRole.name}
-                  </span>
+              <div className="mt-4 pt-4 border-t border-slate-700/80">
+                <p className="text-slate-400 text-sm">
+                  Managing access for role: <span className="text-white font-medium">{selectedRole.name}</span>
                 </p>
               </div>
             )}
           </div>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 };

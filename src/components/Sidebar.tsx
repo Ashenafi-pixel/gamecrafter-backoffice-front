@@ -22,12 +22,10 @@ import {
   X,
   CheckCircle,
   Activity,
-  Wallet,
   Key,
   DollarSign,
   Building2,
   Trophy,
-  Gift,
   Layers,
 } from "lucide-react";
 import gamecrafterLogo from "../assets/game_crafter-logo.png";
@@ -62,11 +60,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
 
     const allowedPaths = new Set(user.allowedPages.map((page) => page.path));
-
-    // If player management is allowed, also allow welcome bonus
-    if (allowedPaths.has("/players")) {
-      allowedPaths.add("/welcome-bonus");
-    }
 
     // If player metrics report is allowed, also allow affiliate report
     if (allowedPaths.has("/reports/player-metrics")) {
@@ -169,18 +162,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         items: [
           { path: "/transactions/gaming" },
           { path: "/transactions/details" },
-        ],
-      },
-      {
-        id: "wallet",
-        path: "/wallet",
-        items: [
-          { path: "/transactions/withdrawals" },
-          { path: "/transactions/withdrawals/dashboard" },
-          { path: "/transactions/deposits" },
-          { path: "/transactions/manual-funds" },
-          { path: "/transactions/withdrawals/settings" },
-          { path: "/wallet/management" },
         ],
       },
       {
@@ -379,38 +360,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [],
     },
     {
-      id: "wallet",
-      label: "Wallet",
-      icon: CreditCard,
-      path: "/wallet",
-      items: [
-        {
-          id: "deposit-management",
-          label: "Deposit Management",
-          icon: CreditCard,
-          path: "/transactions/deposits",
-        },
-        {
-          id: "manual-funds",
-          label: "Fund Management",
-          icon: CreditCard,
-          path: "/transactions/manual-funds",
-        },
-        {
-          id: "wallet-management",
-          label: "Wallet Management",
-          icon: Wallet,
-          path: "/wallet/management",
-        },
-        {
-          id: "withdrawal-dashboard",
-          label: "Withdrawal Dashboard",
-          icon: CreditCard,
-          path: "/transactions/withdrawals/dashboard",
-        },
-      ],
-    },
-    {
       id: "site-settings",
       label: "Site Settings",
       icon: Globe,
@@ -433,7 +382,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "admin-alerts",
-      label: "Alert Management",
+      label: "Notification rules",
       icon: Bell,
       path: "/admin/alerts",
       items: [],

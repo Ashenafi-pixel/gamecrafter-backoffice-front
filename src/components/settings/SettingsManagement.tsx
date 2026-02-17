@@ -8,28 +8,23 @@ import {
   Globe,
   Trash2,
   Plus,
-  Wallet,
-  Eye,
-  EyeOff,
   RefreshCw,
-  Smartphone,
-  DollarSign,
   MapPin,
   Edit2,
-  Ban,
-  CheckCircle,
-  Users,
   Search,
   MoreVertical,
   AlertTriangle,
+  Sliders,
+  Database,
+  UserCog,
 } from "lucide-react";
 import { useServices } from "../../contexts/ServicesContext";
-import { TwoFactorAuthSettings } from "./TwoFactorSettings";
-import WithdrawalSettings from "../WithdrawalSettings/WithdrawalSettings";
 import { wmsService } from "../../services/wmsService";
-import { configService } from "../../services/configService";
-import { brandService } from "../../services/brandService";
-import { WelcomeBonusChannels } from "./WelcomeBonusChannels";
+import {
+  configService,
+  SystemConfig as DatabaseConfig,
+} from "../../services/configService";
+import { getMockBrands } from "../../mocks/brands";
 import toast from "react-hot-toast";
 
 interface CurrencyConfig {
@@ -57,6 +52,31 @@ interface SystemConfig {
   config_key: string;
   config_value: any;
   description: string;
+}
+
+/** API response shape for /settings/general (snake_case) */
+interface GeneralSettingsData {
+  site_name?: string;
+  site_description?: string;
+  support_email?: string;
+  timezone?: string;
+  language?: string;
+  maintenance_mode?: boolean;
+  registration_enabled?: boolean;
+  demo_mode?: boolean;
+}
+
+/** API response shape for /settings/security (snake_case) */
+interface SecuritySettingsData {
+  session_timeout?: number;
+  max_login_attempts?: number;
+  lockout_duration?: number;
+  two_factor_required?: boolean;
+  password_min_length?: number;
+  password_require_special?: boolean;
+  ip_whitelist_enabled?: boolean;
+  rate_limit_enabled?: boolean;
+  rate_limit_requests?: number;
 }
 
 interface WithdrawalGlobalStatus {
@@ -115,19 +135,58 @@ interface SupportedChain {
   updated_at: string;
 }
 
+/** API response shape for /ipfilters */
+interface IpFiltersResponse {
+  ip_filters?: Array<{
+    id: string;
+    type?: string;
+    start_ip?: string;
+    end_ip?: string;
+    description?: string;
+    created_at?: string;
+    created_by?: { first_name?: string; last_name?: string; email?: string };
+  }>;
+}
+
+/** API response shape for /settings/geo-blocking */
+interface GeoBlockingData {
+  enable_geo_blocking?: boolean;
+  default_action?: string;
+  vpn_detection?: boolean;
+  proxy_detection?: boolean;
+  tor_blocking?: boolean;
+  log_attempts?: boolean;
+  blocked_countries?: string[];
+  allowed_countries?: string[];
+  bypass_countries?: string[];
+}
+
+/** API response shape for /settings/welcome-bonus */
+interface WelcomeBonusData {
+  type?: string;
+  enabled?: boolean;
+  fixed_enabled?: boolean;
+  percentage_enabled?: boolean;
+  fixed_amount?: number;
+  percentage?: number;
+  max_deposit_amount?: number;
+  ip_restriction_enabled?: boolean;
+  allow_multiple_bonuses_per_ip?: boolean;
+  max_bonus_percentage?: number;
+}
+
 export const SettingsManagement: React.FC = () => {
   const { walletMgmtSvc, adminSvc } = useServices();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab") || "general";
-  // Default to "general" if tab is "payments" (removed tab)
-  const initialTab = tabFromUrl === "payments" ? "general" : tabFromUrl;
+  const removedTabs = ["payments", "tips", "welcome-bonus"];
+  const initialTab = removedTabs.includes(tabFromUrl) ? "general" : tabFromUrl;
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   // Update tab when URL changes
   useEffect(() => {
     const tab = searchParams.get("tab") || "general";
-    // Default to "general" if tab is "payments" (removed tab)
-    const validTab = tab === "payments" ? "general" : tab;
+    const validTab = removedTabs.includes(tab) ? "general" : tab;
     setActiveTab(validTab);
   }, [searchParams]);
 
@@ -135,13 +194,13 @@ export const SettingsManagement: React.FC = () => {
   const loadIpFilters = async () => {
     try {
       setLoadingIpRules(true);
-      const response = await adminSvc.get("/ipfilters?page=1&per-page=100");
+      const response = await adminSvc.get<IpFiltersResponse>("/ipfilters?page=1&per-page=100");
       if (response.success && response.data) {
         const ipFilters = response.data.ip_filters || [];
         const filters = ipFilters.map((filter: any) => ({
           id: filter.id,
-          type: filter.type === "allow" ? "allow" : "block",
-          target: filter.end_ip && filter.end_ip.trim() ? "range" : "ip",
+          type: (filter.type === "allow" ? "allow" : "block") as "allow" | "block",
+          target: (filter.end_ip && filter.end_ip.trim() ? "range" : "ip") as "ip" | "range" | "country",
           value:
             filter.end_ip && filter.end_ip.trim()
               ? `${filter.start_ip}-${filter.end_ip}`
@@ -156,7 +215,7 @@ export const SettingsManagement: React.FC = () => {
               filter.created_by.email
             : "Unknown",
         }));
-        setIpRules(filters);
+        setIpRules(filters as IPRule[]);
       }
     } catch (error) {
       console.error("Failed to load IP filters:", error);
@@ -322,14 +381,14 @@ export const SettingsManagement: React.FC = () => {
     try {
       setLoadingGeoSettings(true);
       const queryParams = selectedBrandId ? `?brand_id=${selectedBrandId}` : "";
-      const response = await adminSvc.get(
+      const response = await adminSvc.get<GeoBlockingData>(
         `/settings/geo-blocking${queryParams}`,
       );
       if (response.success && response.data) {
         const data = response.data;
         setGeoSettings({
           enableGeoBlocking: data.enable_geo_blocking || false,
-          defaultAction: data.default_action || "allow",
+          defaultAction: ((data.default_action === "block" ? "block" : "allow") as "allow" | "block"),
           vpnDetection: data.vpn_detection || false,
           proxyDetection: data.proxy_detection || false,
           torBlocking: data.tor_blocking || false,
@@ -507,7 +566,16 @@ export const SettingsManagement: React.FC = () => {
   // Use ref to store latest tip settings to avoid stale closure issues
   const tipSettingsRef = useRef(tipSettings);
 
-  const [welcomeBonusSettings, setWelcomeBonusSettings] = useState({
+  const [welcomeBonusSettings, setWelcomeBonusSettings] = useState<{
+    fixed_enabled: boolean;
+    percentage_enabled: boolean;
+    fixed_amount: number;
+    percentage: number;
+    max_deposit_amount: number;
+    ip_restriction_enabled: boolean;
+    allow_multiple_bonuses_per_ip: boolean;
+    max_bonus_percentage?: number;
+  }>({
     fixed_enabled: false,
     percentage_enabled: false,
     fixed_amount: 0.0,
@@ -516,8 +584,8 @@ export const SettingsManagement: React.FC = () => {
     ip_restriction_enabled: true,
     allow_multiple_bonuses_per_ip: false,
   });
-  const [isLoadingWelcomeBonus, setIsLoadingWelcomeBonus] = useState(false);
-  const [isSavingWelcomeBonus, setIsSavingWelcomeBonus] = useState(false);
+  const [_isLoadingWelcomeBonus, setIsLoadingWelcomeBonus] = useState(false);
+  const [_isSavingWelcomeBonus, setIsSavingWelcomeBonus] = useState(false);
   const [securitySettings, setSecuritySettings] = useState({
     sessionTimeout: 30,
     maxLoginAttempts: 5,
@@ -532,7 +600,7 @@ export const SettingsManagement: React.FC = () => {
   const [currencyConfigs, setCurrencyConfigs] = useState<CurrencyConfig[]>([]);
   const [chainConfigs, setChainConfigs] = useState<ChainConfig[]>([]);
   const [systemConfigs, setSystemConfigs] = useState<SystemConfig[]>([]);
-  const [dbConfigs, setDbConfigs] = useState<SystemConfig[]>([]);
+  const [dbConfigs, setDbConfigs] = useState<DatabaseConfig[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([]);
 
@@ -575,19 +643,19 @@ export const SettingsManagement: React.FC = () => {
   const [loadingGeoSettings, setLoadingGeoSettings] = useState(false);
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [editingConfigValue, setEditingConfigValue] = useState<string>("");
-  const [withdrawalGlobalStatus, setWithdrawalGlobalStatus] =
+  const [withdrawalGlobalStatus, _setWithdrawalGlobalStatus] =
     useState<WithdrawalGlobalStatus>({
       enabled: true,
       reason: "",
     });
-  const [withdrawalThresholds, setWithdrawalThresholds] =
+  const [withdrawalThresholds, _setWithdrawalThresholds] =
     useState<WithdrawalThresholds>({
       hourly_volume: { value: 50000, currency: "USD", active: true },
       daily_volume: { value: 1000000, currency: "USD", active: true },
       single_transaction: { value: 10000, currency: "USD", active: true },
       user_daily: { value: 5000, currency: "USD", active: true },
     });
-  const [withdrawalManualReview, setWithdrawalManualReview] =
+  const [withdrawalManualReview, _setWithdrawalManualReview] =
     useState<WithdrawalManualReview>({
       enabled: true,
       threshold_amount: 5000,
@@ -638,7 +706,7 @@ export const SettingsManagement: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const params = { limit: "50", offset: "0" };
+      const _params = { limit: "50", offset: "0" };
 
       // Only fetch data based on active tab
       const promises: Promise<any>[] = [];
@@ -830,7 +898,7 @@ export const SettingsManagement: React.FC = () => {
     }
   }, []);
 
-  const handleMoveFundsToHot = useCallback(async () => {
+  const _handleMoveFundsToHot = useCallback(async () => {
     try {
       setIsSubmittingFundTransfer(true);
 
@@ -875,15 +943,14 @@ export const SettingsManagement: React.FC = () => {
       // Build query params with brand_id (required)
       const queryParams = `?brand_id=${selectedBrandId}`;
 
-      const [generalRes, tipsRes, securityRes] = await Promise.all([
-        adminSvc.get(`/settings/general${queryParams}`),
-        adminSvc.get(`/settings/tips${queryParams}`),
-        adminSvc.get(`/settings/security${queryParams}`),
+      const [generalRes, securityRes] = await Promise.all([
+        adminSvc.get<GeneralSettingsData>(`/settings/general${queryParams}`),
+        adminSvc.get<SecuritySettingsData>(`/settings/security${queryParams}`),
       ]);
 
       if (generalRes.success) {
         // Map snake_case backend fields to camelCase frontend fields
-        const generalData = generalRes.data;
+        const generalData = generalRes.data!;
         setGeneralSettings({
           siteName: generalData.site_name || "Crypto Casino",
           siteDescription:
@@ -900,21 +967,9 @@ export const SettingsManagement: React.FC = () => {
           demoMode: generalData.demo_mode || false,
         });
       }
-      if (tipsRes.success) {
-        // Map snake_case backend fields to camelCase frontend fields
-        const tipsData = tipsRes.data;
-        const loadedTipSettings = {
-          tipTransactionFeeFromWho:
-            tipsData.tip_transaction_fee_from_who || "sender",
-          transactionFee: tipsData.transaction_fee || 1,
-        };
-        setTipSettings(loadedTipSettings);
-        // Update ref to keep it in sync
-        tipSettingsRef.current = loadedTipSettings;
-      }
       if (securityRes.success) {
         // Map snake_case backend fields to camelCase frontend fields
-        const securityData = securityRes.data;
+        const securityData = securityRes.data!;
         setSecuritySettings({
           sessionTimeout: securityData.session_timeout || 30,
           maxLoginAttempts: securityData.max_login_attempts || 5,
@@ -945,30 +1000,13 @@ export const SettingsManagement: React.FC = () => {
     }
   }, [adminSvc, selectedBrandId]);
 
-  // Load brands on mount
+  // Use demo brands from Brands sidebar (no API)
   useEffect(() => {
-    const loadBrands = async () => {
-      try {
-        const response = await brandService.getBrands({
-          page: 1,
-          "per-page": 100,
-        });
-        if (response.success && response.data) {
-          const loadedBrands = response.data.brands.map((b) => ({
-            id: b.id,
-            name: b.name,
-          }));
-          setBrands(loadedBrands);
-          // Set first brand as default if no brand is selected
-          if (loadedBrands.length > 0) {
-            setSelectedBrandId((prev) => prev || loadedBrands[0].id);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load brands:", err);
-      }
-    };
-    loadBrands();
+    const loadedBrands = getMockBrands().map((b) => ({ id: b.id, name: b.name }));
+    setBrands(loadedBrands);
+    if (loadedBrands.length > 0) {
+      setSelectedBrandId((prev) => prev || loadedBrands[0].id);
+    }
   }, []);
 
   useEffect(() => {
@@ -990,7 +1028,7 @@ export const SettingsManagement: React.FC = () => {
     }
     try {
       setIsLoadingWelcomeBonus(true);
-      const response = await adminSvc.get(
+      const response = await adminSvc.get<WelcomeBonusData>(
         `/settings/welcome-bonus?brand_id=${selectedBrandId}`,
       );
       if (response.success && response.data) {
@@ -1000,7 +1038,6 @@ export const SettingsManagement: React.FC = () => {
         let percentageEnabled = data.percentage_enabled || false;
 
         if (data.type && data.enabled !== undefined) {
-          // Old format: migrate to new format
           if (data.type === "fixed" && data.enabled) {
             fixedEnabled = true;
           } else if (data.type === "percentage" && data.enabled) {
@@ -1087,12 +1124,12 @@ export const SettingsManagement: React.FC = () => {
     setHasUnsavedChanges(true);
   }, []);
 
-  const updateSecuritySetting = useCallback((key: string, value: any) => {
+  const _updateSecuritySetting = useCallback((key: string, value: any) => {
     setSecuritySettings((prev) => ({ ...prev, [key]: value }));
     setHasUnsavedChanges(true);
   }, []);
 
-  const updateTipSetting = useCallback((key: string, value: any) => {
+  const _updateTipSetting = useCallback((key: string, value: any) => {
     setTipSettings((prev) => {
       const updated = { ...prev, [key]: value };
       // Update ref immediately so saveSettings always has latest value
@@ -1373,13 +1410,6 @@ export const SettingsManagement: React.FC = () => {
           registration_enabled: generalSettings.registrationEnabled,
           demo_mode: generalSettings.demoMode,
         }),
-        adminSvc.put("/settings/tips", {
-          ...brandIdPayload,
-          // Use ref to get latest values, avoiding stale closure issues
-          tip_transaction_fee_from_who:
-            tipSettingsRef.current.tipTransactionFeeFromWho,
-          transaction_fee: tipSettingsRef.current.transactionFee,
-        }),
         adminSvc.put("/settings/security", {
           ...brandIdPayload,
           session_timeout: securitySettings.sessionTimeout,
@@ -1440,7 +1470,7 @@ export const SettingsManagement: React.FC = () => {
           action: "SITE_SETTINGS_SAVE",
           category: "SiteSettings",
           severity: "info",
-          description: "Saved site settings (general, tips, security)",
+          description: "Saved site settings (general, security)",
         });
       } catch {}
     } catch (err: any) {
@@ -1458,7 +1488,6 @@ export const SettingsManagement: React.FC = () => {
     fetchConfigurations,
     adminSvc,
     generalSettings,
-    tipSettings,
     securitySettings,
     selectedBrandId,
   ]);
@@ -1491,7 +1520,7 @@ export const SettingsManagement: React.FC = () => {
     }
   }, [walletMgmtSvc, withdrawalGlobalStatus]);
 
-  const updateWithdrawalThresholds = useCallback(async () => {
+  const _updateWithdrawalThresholds = useCallback(async () => {
     setIsSaving(true);
     setError(null);
     try {
@@ -1519,7 +1548,7 @@ export const SettingsManagement: React.FC = () => {
     }
   }, [walletMgmtSvc, withdrawalThresholds]);
 
-  const updateWithdrawalManualReview = useCallback(async () => {
+  const _updateWithdrawalManualReview = useCallback(async () => {
     setIsSaving(true);
     setError(null);
     try {
@@ -1538,124 +1567,146 @@ export const SettingsManagement: React.FC = () => {
     }
   }, [walletMgmtSvc, withdrawalManualReview]);
 
+  const sidebarSections = [
+    {
+      title: "Platform",
+      tabs: [
+        { id: "general", label: "General", icon: Settings },
+      ],
+    },
+    {
+      title: "Security & location",
+      tabs: [
+        { id: "ip-blocking", label: "IP allow / block", icon: Shield },
+        { id: "settings", label: "Geo-blocking", icon: Globe },
+      ],
+    },
+    {
+      title: "System & users",
+      tabs: [
+        { id: "configurations", label: "Configuration", icon: Sliders },
+        { id: "database", label: "Database", icon: Database },
+        { id: "admin-users", label: "Admin users", icon: UserCog },
+      ],
+    },
+  ];
+
   return (
-    <div className="space-y-6 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Site Settings</h1>
-          <p className="text-gray-400 mt-1">
-            Configure casino platform settings
-          </p>
+    <div className="space-y-6 max-w-[1600px]">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80">
+            <Settings className="h-7 w-7 text-red-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              Site settings
+            </h1>
+            <p className="text-slate-400 text-sm mt-0.5">
+              Configure platform settings by brand
+            </p>
+          </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={saveSettings}
             disabled={!hasUnsavedChanges || isSaving || isLoading}
-            className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200 ${
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-colors ${
               hasUnsavedChanges && !isSaving && !isLoading
-                ? "bg-purple-600 hover:bg-purple-700 text-white"
-                : "bg-gray-600 text-gray-400 cursor-not-allowed"
+                ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20"
+                : "bg-slate-800 border border-slate-700 text-slate-500 cursor-not-allowed"
             }`}
           >
             <Save className="h-4 w-4" />
-            <span>{isSaving ? "Saving..." : "Save Changes"}</span>
+            {isSaving ? "Saving..." : "Save changes"}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <Bell className="h-5 w-5 text-red-400" />
-            <span className="text-red-400 font-medium">{error}</span>
-          </div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-center gap-3">
+          <Bell className="h-5 w-5 text-red-400 shrink-0" />
+          <span className="text-sm font-medium text-red-400">{error}</span>
         </div>
       )}
 
-      {hasUnsavedChanges && (
-        <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <Bell className="h-5 w-5 text-yellow-400" />
-            <span className="text-yellow-400 font-medium">
-              You have unsaved changes
-            </span>
-          </div>
+      {hasUnsavedChanges && !error && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-center gap-3">
+          <Bell className="h-5 w-5 text-amber-400 shrink-0" />
+          <span className="text-sm font-medium text-amber-400">
+            You have unsaved changes
+          </span>
         </div>
       )}
 
-      <div className="bg-gray-800 border border-gray-700 rounded-lg">
-        {/* Brand Selection - Top of Settings */}
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-300 whitespace-nowrap">
-                Configure Settings for:
-              </label>
-              <select
-                value={selectedBrandId || ""}
-                onChange={(e) => setSelectedBrandId(e.target.value || null)}
-                className="bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-2 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400">
-                Settings will be brand-specific
-              </p>
-            </div>
-          </div>
+      {/* Full-width brand bar */}
+      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/95 to-slate-950/95 px-6 py-4 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="text-sm font-medium text-slate-400 whitespace-nowrap">
+            Configure for brand
+          </label>
+          <select
+            value={selectedBrandId || ""}
+            onChange={(e) => setSelectedBrandId(e.target.value || null)}
+            className="bg-slate-950/60 text-white border border-slate-700 rounded-xl px-4 py-2 min-w-[200px] focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+          >
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
+              </option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        <div className="border-b border-gray-700">
-          <nav className="flex space-x-8 px-6 overflow-x-auto">
-            {[
-              { id: "general", label: "General", icon: Settings },
-              { id: "tips", label: "Tip Settings", icon: DollarSign },
-              { id: "welcome-bonus", label: "Bonus", icon: DollarSign },
-              { id: "configurations", label: "Configuration", icon: Globe },
-              { id: "database", label: "Database Config", icon: Settings },
-              { id: "ip-blocking", label: "IP & Geo Rules", icon: Shield },
-              { id: "settings", label: "Geo-Blocking Settings", icon: Globe },
-              { id: "admin-users", label: "Admin Users", icon: Users },
-            ].map((tab) => {
-              const IconComponent = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setSearchParams({ tab: tab.id });
-                  }}
-                  disabled={isLoading || isSaving}
-                  className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 whitespace-nowrap transition-colors duration-200 ${
-                    activeTab === tab.id
-                      ? "border-purple-500 text-purple-400"
-                      : isLoading || isSaving
-                        ? "border-transparent text-gray-600 cursor-not-allowed"
-                        : "border-transparent text-gray-400 hover:text-white"
-                  }`}
-                >
-                  <IconComponent className="h-4 w-4" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+      {/* Main card: vertical sidebar + content */}
+      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-b from-slate-900/95 to-slate-950/95 overflow-hidden flex flex-col md:flex-row min-h-[480px] backdrop-blur-sm">
+        <aside className="w-full md:w-56 lg:w-64 border-b md:border-b-0 md:border-r border-slate-700/80 bg-slate-800/30">
+          <nav className="p-3 space-y-6" aria-label="Settings sections">
+            {sidebarSections.map((section) => (
+              <div key={section.title}>
+                <h2 className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {section.title}
+                </h2>
+                <div className="space-y-0.5">
+                  {section.tabs.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => {
+                        setActiveTab(id);
+                        setSearchParams({ tab: id });
+                      }}
+                      disabled={isLoading || isSaving}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-xl font-medium text-sm text-left transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                        activeTab === id
+                          ? "bg-red-500/15 text-red-500"
+                          : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </nav>
-        </div>
+        </aside>
 
-        <div className="p-6">
+        <div className="flex-1 p-6 md:p-8 overflow-auto">
           {activeTab === "general" && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-white">
-                General Settings
-              </h3>
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  General settings
+                </h3>
+              </div>
+              <div className="p-4 md:p-6 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Site Name
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Site name
                   </label>
                   <input
                     type="text"
@@ -1664,12 +1715,12 @@ export const SettingsManagement: React.FC = () => {
                       updateGeneralSetting("siteName", e.target.value)
                     }
                     disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Support Email
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Support email
                   </label>
                   <input
                     type="email"
@@ -1678,11 +1729,11 @@ export const SettingsManagement: React.FC = () => {
                       updateGeneralSetting("supportEmail", e.target.value)
                     }
                     disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
                     Timezone
                   </label>
                   <select
@@ -1691,7 +1742,7 @@ export const SettingsManagement: React.FC = () => {
                       updateGeneralSetting("timezone", e.target.value)
                     }
                     disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   >
                     <option value="UTC">UTC</option>
                     <option value="EST">Eastern Time</option>
@@ -1700,7 +1751,7 @@ export const SettingsManagement: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
                     Language
                   </label>
                   <select
@@ -1709,7 +1760,7 @@ export const SettingsManagement: React.FC = () => {
                       updateGeneralSetting("language", e.target.value)
                     }
                     disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                   >
                     <option value="en">English</option>
                     <option value="es">Spanish</option>
@@ -1719,8 +1770,8 @@ export const SettingsManagement: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Site Description
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Site description
                 </label>
                 <textarea
                   value={generalSettings.siteDescription}
@@ -1728,13 +1779,13 @@ export const SettingsManagement: React.FC = () => {
                     updateGeneralSetting("siteDescription", e.target.value)
                   }
                   disabled={isLoading || isSaving}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 h-20 resize-none disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 h-20 resize-none disabled:opacity-50 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                 />
               </div>
-              <div className="space-y-4">
-                <h4 className="text-white font-medium">System Controls</h4>
+              <div className="space-y-4 pt-2">
+                <h4 className="text-slate-300 font-medium text-sm uppercase tracking-wider">System controls</h4>
                 <div className="space-y-3">
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={generalSettings.maintenanceMode}
@@ -1745,11 +1796,11 @@ export const SettingsManagement: React.FC = () => {
                         )
                       }
                       disabled={isLoading || isSaving}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">Maintenance Mode</span>
+                    <span className="text-slate-200">Maintenance mode</span>
                   </label>
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={generalSettings.registrationEnabled}
@@ -1760,11 +1811,11 @@ export const SettingsManagement: React.FC = () => {
                         )
                       }
                       disabled={isLoading || isSaving}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">Allow New Registrations</span>
+                    <span className="text-slate-200">Allow new registrations</span>
                   </label>
-                  <label className="flex items-center space-x-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={generalSettings.demoMode}
@@ -1772,349 +1823,24 @@ export const SettingsManagement: React.FC = () => {
                         updateGeneralSetting("demoMode", e.target.checked)
                       }
                       disabled={isLoading || isSaving}
-                      className="rounded border-gray-500 disabled:opacity-50"
+                      className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                     />
-                    <span className="text-white">Demo Mode</span>
+                    <span className="text-slate-200">Demo mode</span>
                   </label>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === "tips" && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-white">Tip Settings</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Transaction Fee Charged From
-                  </label>
-                  <select
-                    value={tipSettings.tipTransactionFeeFromWho}
-                    onChange={(e) =>
-                      updateTipSetting(
-                        "tipTransactionFeeFromWho",
-                        e.target.value,
-                      )
-                    }
-                    disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
-                  >
-                    <option value="sender">Sender</option>
-                    <option value="receiver">Receiver</option>
-                  </select>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Choose whether the transaction fee is charged from the tip
-                    sender or receiver
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Transaction Fee (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    step="0.1"
-                    value={tipSettings.transactionFee}
-                    onChange={(e) =>
-                      updateTipSetting(
-                        "transactionFee",
-                        parseFloat(e.target.value) || 1,
-                      )
-                    }
-                    disabled={isLoading || isSaving}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
-                  />
-                  <p className="mt-2 text-sm text-gray-500">
-                    Transaction fee percentage (1-100)
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "welcome-bonus" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">
-                  Bonus Settings
-                </h3>
-                <button
-                  onClick={saveWelcomeBonusSettings}
-                  disabled={
-                    !selectedBrandId ||
-                    isSavingWelcomeBonus ||
-                    isLoadingWelcomeBonus
-                  }
-                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200 ${
-                    selectedBrandId &&
-                    !isSavingWelcomeBonus &&
-                    !isLoadingWelcomeBonus
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  <Save className="h-4 w-4" />
-                  <span>
-                    {isSavingWelcomeBonus ? "Saving..." : "Save Settings"}
-                  </span>
-                </button>
-              </div>
-
-              {!selectedBrandId && (
-                <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-                  <div className="flex items-center space-x-2">
-                    <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                    <span className="text-yellow-400 font-medium">
-                      Please select a brand to configure bonus settings
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {isLoadingWelcomeBonus ? (
-                <div className="text-gray-400">Loading bonus settings...</div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Fixed Amount Welcome Bonus Toggle */}
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                    <label className="flex items-center space-x-3 mb-4">
-                      <input
-                        type="checkbox"
-                        checked={welcomeBonusSettings.fixed_enabled}
-                        onChange={(e) => {
-                          const newValue = e.target.checked;
-                          setWelcomeBonusSettings((prev) => ({
-                            ...prev,
-                            fixed_enabled: newValue,
-                          }));
-                        }}
-                        disabled={!selectedBrandId || isSavingWelcomeBonus}
-                        className="rounded border-gray-500 disabled:opacity-50"
-                      />
-                      <span className="text-white font-medium">
-                        Enable Fixed Amount Bonus
-                      </span>
-                    </label>
-                    <p className="text-sm text-gray-400 ml-7">
-                      Enable or disable the fixed amount bonus for new users
-                    </p>
-                  </div>
-
-                  {/* Fixed Amount Input - shown when fixed_enabled is true */}
-                  {welcomeBonusSettings.fixed_enabled && (
-                    <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                      <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Fixed Bonus Amount
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={welcomeBonusSettings.fixed_amount}
-                        onChange={(e) =>
-                          setWelcomeBonusSettings((prev) => ({
-                            ...prev,
-                            fixed_amount: parseFloat(e.target.value) || 0.0,
-                          }))
-                        }
-                        disabled={!selectedBrandId || isSavingWelcomeBonus}
-                        className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
-                      />
-                      <p className="mt-2 text-sm text-gray-500">
-                        Fixed bonus amount awarded to new users
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Percentage-Based Welcome Bonus Toggle */}
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                    <label className="flex items-center space-x-3 mb-4">
-                      <input
-                        type="checkbox"
-                        checked={welcomeBonusSettings.percentage_enabled}
-                        onChange={(e) => {
-                          const newValue = e.target.checked;
-                          setWelcomeBonusSettings((prev) => ({
-                            ...prev,
-                            percentage_enabled: newValue,
-                          }));
-                        }}
-                        disabled={!selectedBrandId || isSavingWelcomeBonus}
-                        className="rounded border-gray-500 disabled:opacity-50"
-                      />
-                      <span className="text-white font-medium">
-                        Enable Percentage-Based (Deposit Match) Bonus
-                      </span>
-                    </label>
-                    <p className="text-sm text-gray-400 ml-7">
-                      Enable or disable the percentage-based bonus for new users
-                    </p>
-                  </div>
-
-                  {/* Percentage-Based Inputs - shown when percentage_enabled is true */}
-                  {welcomeBonusSettings.percentage_enabled && (
-                    <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">
-                          Bonus Percentage (%)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={welcomeBonusSettings.percentage}
-                          onChange={(e) =>
-                            setWelcomeBonusSettings((prev) => ({
-                              ...prev,
-                              percentage: parseFloat(e.target.value) || 0.0,
-                            }))
-                          }
-                          disabled={!selectedBrandId || isSavingWelcomeBonus}
-                          className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
-                        />
-                        <p className="mt-2 text-sm text-gray-500">
-                          Percentage bonus on deposit (e.g., 50 for 50%)
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">
-                          Max deposit amount
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={welcomeBonusSettings.max_deposit_amount}
-                          onChange={(e) =>
-                            setWelcomeBonusSettings((prev) => ({
-                              ...prev,
-                              max_deposit_amount:
-                                parseFloat(e.target.value) || 0.0,
-                            }))
-                          }
-                          disabled={!selectedBrandId || isSavingWelcomeBonus}
-                          className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
-                        />
-                        <p className="mt-2 text-sm text-gray-500">
-                          Maximum deposit amount for bonus calculation
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bonus Calculation Example - shown when percentage is enabled */}
-                  {welcomeBonusSettings.percentage_enabled && (
-                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                      <h4 className="text-blue-400 font-medium mb-2">
-                        Bonus Calculation Example
-                      </h4>
-                      <p className="text-sm text-gray-300">
-                        For a ${welcomeBonusSettings.max_deposit_amount || 0}{" "}
-                        max deposit with {welcomeBonusSettings.percentage || 0}%
-                        bonus:
-                      </p>
-                      <p className="text-sm text-gray-300 mt-1">
-                        Bonus = ${welcomeBonusSettings.max_deposit_amount || 0}{" "}
-                        × {welcomeBonusSettings.percentage || 0}% = $
-                        {(
-                          ((welcomeBonusSettings.max_deposit_amount || 0) *
-                            (welcomeBonusSettings.percentage || 0)) /
-                          100
-                        ).toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* IP Policy Settings */}
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 space-y-4">
-                    <h4 className="text-white font-medium mb-4">
-                      IP Policy Settings
-                    </h4>
-                    <p className="text-sm text-gray-400 mb-4">
-                      Configure IP-based restrictions for welcome bonuses. These
-                      settings can be inherited by channel-specific rules.
-                    </p>
-
-                    {/* IP Restriction Enabled Toggle */}
-                    <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                      <label className="flex items-center space-x-3 mb-2">
-                        <input
-                          type="checkbox"
-                          checked={welcomeBonusSettings.ip_restriction_enabled}
-                          onChange={(e) =>
-                            setWelcomeBonusSettings((prev) => ({
-                              ...prev,
-                              ip_restriction_enabled: e.target.checked,
-                            }))
-                          }
-                          disabled={!selectedBrandId || isSavingWelcomeBonus}
-                          className="rounded border-gray-500 disabled:opacity-50"
-                        />
-                        <span className="text-white font-medium">
-                          Enable IP Restriction
-                        </span>
-                      </label>
-                      <p className="text-sm text-gray-400 ml-7">
-                        When enabled, IP-based restrictions will be applied to
-                        prevent bonus abuse
-                      </p>
-                    </div>
-
-                    {/* Allow Multiple Bonuses Per IP Toggle */}
-                    {welcomeBonusSettings.ip_restriction_enabled && (
-                      <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                        <label className="flex items-center space-x-3 mb-2">
-                          <input
-                            type="checkbox"
-                            checked={
-                              welcomeBonusSettings.allow_multiple_bonuses_per_ip
-                            }
-                            onChange={(e) =>
-                              setWelcomeBonusSettings((prev) => ({
-                                ...prev,
-                                allow_multiple_bonuses_per_ip: e.target.checked,
-                              }))
-                            }
-                            disabled={
-                              !selectedBrandId ||
-                              isSavingWelcomeBonus ||
-                              !welcomeBonusSettings.ip_restriction_enabled
-                            }
-                            className="rounded border-gray-500 disabled:opacity-50"
-                          />
-                          <span className="text-white font-medium">
-                            Allow Multiple Bonuses Per IP
-                          </span>
-                        </label>
-                        <p className="text-sm text-gray-400 ml-7">
-                          When enabled, multiple accounts from the same IP
-                          address can receive welcome bonuses. When disabled,
-                          only the first account from an IP address will receive
-                          a welcome bonus.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Channel-Based Bonus Rules Section */}
-              <div className="mt-8 pt-8 border-t border-gray-700">
-                <WelcomeBonusChannels brandId={selectedBrandId} />
               </div>
             </div>
           )}
 
           {activeTab === "configurations" && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-white">
-                Configuration Settings
-              </h3>
-
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  Configuration settings
+                </h3>
+              </div>
+              <div className="p-4 md:p-6 space-y-6">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="text-white font-medium">
@@ -2123,16 +1849,16 @@ export const SettingsManagement: React.FC = () => {
                   <button
                     onClick={() => setShowCurrencyModal(true)}
                     disabled={isLoading || isSaving}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-3 py-1 rounded-xl flex items-center gap-2 disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Add Currency</span>
+                    <span>Add currency</span>
                   </button>
                 </div>
                 {isLoading ? (
-                  <div className="text-gray-400">Loading...</div>
+                  <div className="text-slate-400">Loading...</div>
                 ) : currencyConfigs.length === 0 ? (
-                  <div className="text-gray-400">
+                  <div className="text-slate-400">
                     No currency configurations available
                   </div>
                 ) : (
@@ -2140,7 +1866,7 @@ export const SettingsManagement: React.FC = () => {
                     {currencyConfigs.map((config) => (
                       <div
                         key={config.currency_code}
-                        className="border border-gray-600 rounded-lg p-4 relative"
+                        className="border border-slate-700/80 rounded-xl p-4 relative"
                       >
                         <button
                           onClick={() =>
@@ -2157,18 +1883,18 @@ export const SettingsManagement: React.FC = () => {
                         </button>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Currency Code
                             </label>
                             <input
                               type="text"
                               value={config.currency_code}
                               disabled
-                              className="w-full bg-gray-600 text-white border border-gray-600 rounded-lg px-3 py-2"
+                              className="w-full bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-2"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Currency Name
                             </label>
                             <input
@@ -2183,11 +1909,11 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Currency Type
                             </label>
                             <select
@@ -2203,14 +1929,14 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             >
                               <option value="fiat">Fiat</option>
                               <option value="crypto">Crypto</option>
                             </select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Decimal Places
                             </label>
                             <input
@@ -2225,11 +1951,11 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Smallest Unit Name
                             </label>
                             <input
@@ -2245,7 +1971,7 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             />
                           </div>
                           <div>
@@ -2262,7 +1988,7 @@ export const SettingsManagement: React.FC = () => {
                                   })
                                 }
                                 disabled={isLoading || isSaving}
-                                className="rounded border-gray-500 disabled:opacity-50"
+                                className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                               />
                               <span className="text-white">Active</span>
                             </label>
@@ -2282,16 +2008,16 @@ export const SettingsManagement: React.FC = () => {
                   <button
                     onClick={() => setShowChainModal(true)}
                     disabled={isLoading || isSaving}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-3 py-1 rounded-lg flex items-center space-x-2 disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Add Chain</span>
                   </button>
                 </div>
                 {isLoading ? (
-                  <div className="text-gray-400">Loading...</div>
+                  <div className="text-slate-400">Loading...</div>
                 ) : chainConfigs.length === 0 ? (
-                  <div className="text-gray-400">
+                  <div className="text-slate-400">
                     No chain configurations available
                   </div>
                 ) : (
@@ -2299,7 +2025,7 @@ export const SettingsManagement: React.FC = () => {
                     {chainConfigs.map((config) => (
                       <div
                         key={config.chain_id}
-                        className="border border-gray-600 rounded-lg p-4 relative"
+                        className="border border-slate-700/80 rounded-xl p-4 relative"
                       >
                         <button
                           onClick={() =>
@@ -2312,18 +2038,18 @@ export const SettingsManagement: React.FC = () => {
                         </button>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Chain ID
                             </label>
                             <input
                               type="text"
                               value={config.chain_id}
                               disabled
-                              className="w-full bg-gray-600 text-white border border-gray-600 rounded-lg px-3 py-2"
+                              className="w-full bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-2"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Name
                             </label>
                             <input
@@ -2338,11 +2064,11 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Processor
                             </label>
                             <select
@@ -2358,14 +2084,14 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             >
                               <option value="internal">Internal</option>
                               <option value="pdm">PDM</option>
                             </select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Status
                             </label>
                             <select
@@ -2381,7 +2107,7 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             >
                               <option value="active">Active</option>
                               <option value="inactive">Inactive</option>
@@ -2401,7 +2127,7 @@ export const SettingsManagement: React.FC = () => {
                                   })
                                 }
                                 disabled={isLoading || isSaving}
-                                className="rounded border-gray-500 disabled:opacity-50"
+                                className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                               />
                               <span className="text-white">Testnet</span>
                             </label>
@@ -2421,16 +2147,16 @@ export const SettingsManagement: React.FC = () => {
                   <button
                     onClick={() => setShowSystemModal(true)}
                     disabled={isLoading || isSaving}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-3 py-1 rounded-lg flex items-center space-x-2 disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Add System Config</span>
                   </button>
                 </div>
                 {isLoading ? (
-                  <div className="text-gray-400">Loading...</div>
+                  <div className="text-slate-400">Loading...</div>
                 ) : systemConfigs.length === 0 ? (
-                  <div className="text-gray-400">
+                  <div className="text-slate-400">
                     No system configurations available
                   </div>
                 ) : (
@@ -2438,7 +2164,7 @@ export const SettingsManagement: React.FC = () => {
                     {systemConfigs.map((config) => (
                       <div
                         key={config.config_key}
-                        className="border border-gray-600 rounded-lg p-4 relative"
+                        className="border border-slate-700/80 rounded-xl p-4 relative"
                       >
                         <button
                           onClick={() =>
@@ -2455,18 +2181,18 @@ export const SettingsManagement: React.FC = () => {
                         </button>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Config Key
                             </label>
                             <input
                               type="text"
                               value={config.config_key}
                               disabled
-                              className="w-full bg-gray-600 text-white border border-gray-600 rounded-lg px-3 py-2"
+                              className="w-full bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-2"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Config Value
                             </label>
                             <div className="space-y-2">
@@ -2490,7 +2216,7 @@ export const SettingsManagement: React.FC = () => {
                                     }
                                     placeholder="Key"
                                     disabled={isLoading || isSaving}
-                                    className="w-1/2 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                                    className="w-1/2 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                                   />
                                   <input
                                     type="text"
@@ -2505,7 +2231,7 @@ export const SettingsManagement: React.FC = () => {
                                     }
                                     placeholder="Value (JSON)"
                                     disabled={isLoading || isSaving}
-                                    className="w-1/2 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                                    className="w-1/2 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                                   />
                                   <button
                                     onClick={() =>
@@ -2526,7 +2252,7 @@ export const SettingsManagement: React.FC = () => {
                                   addSystemConfigField(config.config_key)
                                 }
                                 disabled={isLoading || isSaving}
-                                className="text-purple-400 hover:text-purple-300 text-sm flex items-center space-x-1 disabled:opacity-50"
+                                className="text-red-400 hover:text-red-300 text-sm flex items-center space-x-1 disabled:opacity-50"
                               >
                                 <Plus className="h-4 w-4" />
                                 <span>Add Field</span>
@@ -2534,7 +2260,7 @@ export const SettingsManagement: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                            <label className="block text-sm font-medium text-slate-400 mb-2">
                               Description
                             </label>
                             <textarea
@@ -2548,7 +2274,7 @@ export const SettingsManagement: React.FC = () => {
                                 })
                               }
                               disabled={isLoading || isSaving}
-                              className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 h-20 resize-none disabled:opacity-50"
+                              className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 h-20 resize-none disabled:opacity-50"
                             />
                           </div>
                         </div>
@@ -2557,35 +2283,36 @@ export const SettingsManagement: React.FC = () => {
                   </div>
                 )}
               </div>
+              </div>
             </div>
           )}
 
           {/* Database Configs Tab */}
           {activeTab === "database" && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-white">
-                  Database Configurations
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  Database configurations
                 </h3>
                 <button
                   onClick={() => fetchConfigurations()}
                   disabled={isLoading || isSaving}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 disabled:opacity-50"
                 >
                   <RefreshCw className="h-4 w-4" />
                   <span>Refresh</span>
                 </button>
               </div>
-
+              <div className="p-4 md:p-6 space-y-6">
               {/* Brand Selection */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/80">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   Filter by Brand
                 </label>
                 <select
                   value={selectedBrandId || ""}
                   onChange={(e) => setSelectedBrandId(e.target.value || null)}
-                  className="w-full md:w-64 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full md:w-64 bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 >
                   {brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>
@@ -2593,15 +2320,15 @@ export const SettingsManagement: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   Showing configurations for selected brand
                 </p>
               </div>
 
               {isLoading ? (
-                <div className="text-gray-400 text-center py-8">Loading...</div>
+                <div className="text-slate-400 text-center py-8">Loading...</div>
               ) : dbConfigs.length === 0 ? (
-                <div className="text-gray-400 text-center py-8">
+                <div className="text-slate-400 text-center py-8">
                   No database configurations available
                 </div>
               ) : (
@@ -2609,22 +2336,22 @@ export const SettingsManagement: React.FC = () => {
                   {dbConfigs.map((config) => (
                     <div
                       key={config.id}
-                      className="border border-gray-600 rounded-lg p-4 bg-gray-700/50"
+                      className="border border-slate-700/80 rounded-xl p-4 bg-slate-800/50"
                     >
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                          <label className="block text-sm font-medium text-slate-400 mb-2">
                             Name
                           </label>
                           <input
                             type="text"
                             value={config.name}
                             disabled
-                            className="w-full bg-gray-600 text-white border border-gray-600 rounded-lg px-3 py-2"
+                            className="w-full bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-2"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                          <label className="block text-sm font-medium text-slate-400 mb-2">
                             Value
                           </label>
                           <div className="flex space-x-2">
@@ -2643,7 +2370,7 @@ export const SettingsManagement: React.FC = () => {
                                 setEditingConfigValue(config.value);
                               }}
                               disabled={isSaving}
-                              className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                              className="flex-1 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                             />
                             {editingConfigId === config.id && (
                               <>
@@ -2682,7 +2409,7 @@ export const SettingsManagement: React.FC = () => {
                                     }
                                   }}
                                   disabled={isSaving}
-                                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 flex items-center space-x-2"
+                                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 flex items-center space-x-2"
                                 >
                                   <Save className="h-4 w-4" />
                                   <span>Save</span>
@@ -2693,7 +2420,7 @@ export const SettingsManagement: React.FC = () => {
                                     setEditingConfigValue("");
                                   }}
                                   disabled={isSaving}
-                                  className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-xl disabled:opacity-50"
                                 >
                                   Cancel
                                 </button>
@@ -2702,14 +2429,14 @@ export const SettingsManagement: React.FC = () => {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                          <label className="block text-sm font-medium text-slate-400 mb-2">
                             Created At
                           </label>
                           <input
                             type="text"
                             value={new Date(config.created_at).toLocaleString()}
                             disabled
-                            className="w-full bg-gray-600 text-white border border-gray-600 rounded-lg px-3 py-2"
+                            className="w-full bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-2"
                           />
                         </div>
                       </div>
@@ -2717,14 +2444,15 @@ export const SettingsManagement: React.FC = () => {
                   ))}
                 </div>
               )}
+              </div>
             </div>
           )}
 
           {activeTab === "ip-blocking" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">
-                  IP & Geo Rules ({ipRules.length})
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  IP & geo rules ({ipRules.length})
                 </h3>
                 <button
                   onClick={() => {
@@ -2738,42 +2466,43 @@ export const SettingsManagement: React.FC = () => {
                     setShowCreateRuleModal(true);
                   }}
                   disabled={loadingIpRules}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 disabled:opacity-50"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Create Rule</span>
+                  <span>Create rule</span>
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="p-4 md:p-6">
+              <div className="overflow-x-auto rounded-xl border border-slate-700/80">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                    <tr className="border-b border-slate-700/80">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Rule ID
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Type
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Target
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Value
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Description
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Status
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Created
                       </th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-left py-3 px-4 text-slate-400 font-medium">
                         Created By
                       </th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">
+                      <th className="text-right py-3 px-4 text-slate-400 font-medium">
                         Actions
                       </th>
                     </tr>
@@ -2783,10 +2512,10 @@ export const SettingsManagement: React.FC = () => {
                       <tr>
                         <td
                           colSpan={9}
-                          className="py-8 text-center text-gray-400"
+                          className="py-8 text-center text-slate-400"
                         >
                           <div className="flex items-center justify-center space-x-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>
                             <span>Loading IP filters...</span>
                           </div>
                         </td>
@@ -2795,7 +2524,7 @@ export const SettingsManagement: React.FC = () => {
                       <tr>
                         <td
                           colSpan={9}
-                          className="py-8 text-center text-gray-400"
+                          className="py-8 text-center text-slate-400"
                         >
                           No IP filters found. Create your first rule to get
                           started.
@@ -2805,9 +2534,9 @@ export const SettingsManagement: React.FC = () => {
                       ipRules.map((rule, index) => (
                         <tr
                           key={index}
-                          className="border-b border-gray-700/50 hover:bg-gray-700/30"
+                          className="border-b border-slate-700/50 hover:bg-slate-700/30"
                         >
-                          <td className="py-3 px-4 text-purple-400 font-mono text-sm">
+                          <td className="py-3 px-4 text-red-400 font-mono text-sm">
                             {rule.id}
                           </td>
                           <td className="py-3 px-4">
@@ -2828,7 +2557,7 @@ export const SettingsManagement: React.FC = () => {
                           <td className="py-3 px-4 text-white font-mono">
                             {rule.value}
                           </td>
-                          <td className="py-3 px-4 text-gray-300 max-w-xs truncate">
+                          <td className="py-3 px-4 text-slate-300 max-w-xs truncate">
                             {rule.description}
                           </td>
                           <td className="py-3 px-4">
@@ -2837,16 +2566,16 @@ export const SettingsManagement: React.FC = () => {
                               className={`px-2 py-1 rounded text-xs font-medium ${
                                 rule.isActive
                                   ? "text-green-400 bg-green-400/10 hover:bg-green-400/20"
-                                  : "text-gray-400 bg-gray-400/10 hover:bg-gray-400/20"
+                                  : "text-slate-400 bg-slate-500/10 hover:bg-slate-500/20"
                               }`}
                             >
                               {rule.isActive ? "Active" : "Inactive"}
                             </button>
                           </td>
-                          <td className="py-3 px-4 text-gray-400 text-sm">
+                          <td className="py-3 px-4 text-slate-400 text-sm">
                             {rule.createdDate}
                           </td>
-                          <td className="py-3 px-4 text-gray-400 text-sm">
+                          <td className="py-3 px-4 text-slate-400 text-sm">
                             {rule.createdBy}
                           </td>
                           <td className="py-3 px-4">
@@ -2873,60 +2602,62 @@ export const SettingsManagement: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              </div>
             </div>
           )}
 
           {activeTab === "admin-users" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">
-                  Admin Users Management
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  Admin users
                 </h3>
               </div>
+              <div className="p-4 md:p-6">
 
               {/* Search */}
-              <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+              <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                   <input
                     type="text"
                     placeholder="Search by username, email, or ID..."
                     value={adminUserSearchTerm}
                     onChange={(e) => setAdminUserSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:border-transparent"
                   />
                 </div>
               </div>
 
               {/* Admin Users Table */}
-              <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+              <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl overflow-hidden">
                 {loadingAdminUsers ? (
-                  <div className="text-center py-8 text-gray-400">
+                  <div className="text-center py-8 text-slate-400">
                     Loading admin users...
                   </div>
                 ) : (
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                      <tr className="border-b border-slate-700/80">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           ID
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           Email
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           Name
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           Role
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           Status
                         </th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-left py-3 px-4 text-slate-400 font-medium">
                           Created
                         </th>
-                        <th className="text-right py-3 px-4 text-gray-400 font-medium">
+                        <th className="text-right py-3 px-4 text-slate-400 font-medium">
                           Actions
                         </th>
                       </tr>
@@ -2949,15 +2680,15 @@ export const SettingsManagement: React.FC = () => {
                         .map((user) => (
                           <tr
                             key={user.id}
-                            className="border-b border-gray-700/50 hover:bg-gray-700/30"
+                            className="border-b border-slate-700/50 hover:bg-slate-700/30"
                           >
-                            <td className="py-3 px-4 text-purple-400 font-mono text-sm">
+                            <td className="py-3 px-4 text-red-400 font-mono text-sm">
                               {user.id}
                             </td>
-                            <td className="py-3 px-4 text-gray-300">
+                            <td className="py-3 px-4 text-slate-300">
                               {user.email}
                             </td>
-                            <td className="py-3 px-4 text-gray-300">
+                            <td className="py-3 px-4 text-slate-300">
                               {user.first_name || user.last_name
                                 ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
                                 : "N/A"}
@@ -2970,13 +2701,13 @@ export const SettingsManagement: React.FC = () => {
                                 className={`px-2 py-1 rounded text-xs font-medium ${
                                   user.status === "Active"
                                     ? "text-green-400 bg-green-400/10"
-                                    : "text-gray-400 bg-gray-400/10"
+                                    : "text-slate-400 bg-slate-500/10"
                                 }`}
                               >
                                 {user.status}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-gray-400 text-sm">
+                            <td className="py-3 px-4 text-slate-400 text-sm">
                               {user.created_at
                                 ? new Date(user.created_at).toLocaleDateString()
                                 : "N/A"}
@@ -2992,14 +2723,14 @@ export const SettingsManagement: React.FC = () => {
                                           : user.id,
                                       )
                                     }
-                                    className="p-1 text-gray-400 hover:text-white transition-colors"
+                                    className="p-1 text-slate-400 hover:text-white transition-colors"
                                     title="Actions"
                                   >
                                     <MoreVertical className="h-4 w-4" />
                                   </button>
 
                                   {openAdminDropdown === user.id && (
-                                    <div className="absolute right-0 mt-1 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-10">
+                                    <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-lg z-10">
                                       <div className="py-1">
                                         <button
                                           onClick={() => {
@@ -3007,7 +2738,7 @@ export const SettingsManagement: React.FC = () => {
                                             setShowDeleteAdminModal(true);
                                             setOpenAdminDropdown(null);
                                           }}
-                                          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-red-400 transition-colors"
+                                          className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-red-400 transition-colors"
                                         >
                                           <Trash2 className="h-4 w-4 mr-3" />
                                           Delete User
@@ -3036,7 +2767,7 @@ export const SettingsManagement: React.FC = () => {
                         <tr>
                           <td
                             colSpan={7}
-                            className="py-8 text-center text-gray-400"
+                            className="py-8 text-center text-slate-400"
                           >
                             {adminUserSearchTerm
                               ? "No admin users found matching your search"
@@ -3052,7 +2783,7 @@ export const SettingsManagement: React.FC = () => {
               {/* Delete Admin User Modal */}
               {showDeleteAdminModal && adminUserToDelete && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-gray-800 rounded-lg w-full max-w-md">
+                  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl w-full max-w-md">
                     <div className="p-6">
                       <div className="flex items-center mb-4">
                         <div className="flex-shrink-0">
@@ -3064,18 +2795,18 @@ export const SettingsManagement: React.FC = () => {
                           <h3 className="text-lg font-medium text-white">
                             Delete Admin User
                           </h3>
-                          <p className="text-sm text-gray-400">
+                          <p className="text-sm text-slate-400">
                             This action cannot be undone.
                           </p>
                         </div>
                       </div>
 
                       <div className="mb-6">
-                        <p className="text-gray-300">
+                        <p className="text-slate-300">
                           Are you sure you want to delete this admin user?
                         </p>
-                        <div className="mt-3 p-3 bg-gray-700 rounded-lg">
-                          <div className="text-sm text-gray-300">
+                        <div className="mt-3 p-3 bg-slate-800/60 rounded-xl">
+                          <div className="text-sm text-slate-300">
                             <div>
                               <span className="font-medium">Username:</span>{" "}
                               {adminUserToDelete.username}
@@ -3099,7 +2830,7 @@ export const SettingsManagement: React.FC = () => {
                             setAdminUserToDelete(null);
                           }}
                           disabled={deletingAdminUser}
-                          className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           Cancel
                         </button>
@@ -3120,20 +2851,23 @@ export const SettingsManagement: React.FC = () => {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           )}
 
           {activeTab === "settings" && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-white">
-                Geo-Blocking Configuration
-              </h3>
-
+            <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="px-6 py-4 border-b border-slate-700/80">
+                <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+                  Geo-blocking configuration
+                </h3>
+              </div>
+              <div className="p-4 md:p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* General Settings */}
-                <div className="bg-gray-700 rounded-lg p-4">
-                  <h5 className="text-white font-medium mb-4">
-                    General Settings
+                <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4">
+                  <h5 className="text-slate-200 font-medium mb-4 text-sm">
+                    General settings
                   </h5>
                   <div className="space-y-4">
                     <label className="flex items-center space-x-3">
@@ -3146,13 +2880,13 @@ export const SettingsManagement: React.FC = () => {
                             e.target.checked,
                           )
                         }
-                        className="rounded border-gray-500"
+                        className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20"
                       />
                       <span className="text-white">Enable Geo-Blocking</span>
                     </label>
 
                     <div>
-                      <label className="block text-sm text-gray-400 mb-2">
+                      <label className="block text-sm text-slate-400 mb-2">
                         Default Action
                       </label>
                       <select
@@ -3160,7 +2894,7 @@ export const SettingsManagement: React.FC = () => {
                         onChange={(e) =>
                           updateGeoSetting("defaultAction", e.target.value)
                         }
-                        className="w-full bg-gray-600 text-white border border-gray-500 rounded px-3 py-2"
+                        className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2"
                       >
                         <option value="allow">Allow by Default</option>
                         <option value="block">Block by Default</option>
@@ -3174,7 +2908,7 @@ export const SettingsManagement: React.FC = () => {
                         onChange={(e) =>
                           updateGeoSetting("logAttempts", e.target.checked)
                         }
-                        className="rounded border-gray-500"
+                        className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20"
                       />
                       <span className="text-white">Log Access Attempts</span>
                     </label>
@@ -3182,7 +2916,7 @@ export const SettingsManagement: React.FC = () => {
                 </div>
 
                 {/* Security Features */}
-                <div className="bg-gray-700 rounded-lg p-4">
+                <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4">
                   <h5 className="text-white font-medium mb-4">
                     Security Features
                   </h5>
@@ -3194,7 +2928,7 @@ export const SettingsManagement: React.FC = () => {
                         onChange={(e) =>
                           updateGeoSetting("vpnDetection", e.target.checked)
                         }
-                        className="rounded border-gray-500"
+                        className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20"
                       />
                       <span className="text-white">Block VPN Traffic</span>
                     </label>
@@ -3206,7 +2940,7 @@ export const SettingsManagement: React.FC = () => {
                         onChange={(e) =>
                           updateGeoSetting("proxyDetection", e.target.checked)
                         }
-                        className="rounded border-gray-500"
+                        className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20"
                       />
                       <span className="text-white">Block Proxy Traffic</span>
                     </label>
@@ -3218,7 +2952,7 @@ export const SettingsManagement: React.FC = () => {
                         onChange={(e) =>
                           updateGeoSetting("torBlocking", e.target.checked)
                         }
-                        className="rounded border-gray-500"
+                        className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20"
                       />
                       <span className="text-white">Block Tor Traffic</span>
                     </label>
@@ -3231,7 +2965,7 @@ export const SettingsManagement: React.FC = () => {
                 <button
                   onClick={saveGeoBlockingSettings}
                   disabled={loadingGeoSettings}
-                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2"
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2"
                 >
                   {loadingGeoSettings && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -3239,9 +2973,10 @@ export const SettingsManagement: React.FC = () => {
                   <span>
                     {loadingGeoSettings
                       ? "Saving..."
-                      : "Save Geo-Blocking Settings"}
+                      : "Save geo-blocking settings"}
                   </span>
                 </button>
+              </div>
               </div>
             </div>
           )}
@@ -3250,13 +2985,13 @@ export const SettingsManagement: React.FC = () => {
 
       {showCurrencyModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-lg">
             <h3 className="text-lg font-semibold text-white mb-4">
               Add Currency Configuration
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Currency Code
                 </label>
                 <input
@@ -3269,11 +3004,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingCurrency}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Currency Name
                 </label>
                 <input
@@ -3286,11 +3021,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingCurrency}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Currency Type
                 </label>
                 <select
@@ -3302,14 +3037,14 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingCurrency}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 >
                   <option value="fiat">Fiat</option>
                   <option value="crypto">Crypto</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Decimal Places
                 </label>
                 <input
@@ -3322,11 +3057,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingCurrency}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Smallest Unit Name
                 </label>
                 <input
@@ -3339,7 +3074,7 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingCurrency}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
@@ -3354,7 +3089,7 @@ export const SettingsManagement: React.FC = () => {
                       })
                     }
                     disabled={isSubmittingCurrency}
-                    className="rounded border-gray-500 disabled:opacity-50"
+                    className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                   />
                   <span className="text-white">Active</span>
                 </label>
@@ -3364,14 +3099,14 @@ export const SettingsManagement: React.FC = () => {
               <button
                 onClick={() => setShowCurrencyModal(false)}
                 disabled={isSubmittingCurrency}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 border border-slate-600"
               >
                 Cancel
               </button>
               <button
                 onClick={() => addNewConfig("currency")}
                 disabled={isSubmittingCurrency}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg disabled:opacity-50"
               >
                 {isSubmittingCurrency ? "Adding..." : "Add"}
               </button>
@@ -3382,13 +3117,13 @@ export const SettingsManagement: React.FC = () => {
 
       {showChainModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-lg">
             <h3 className="text-lg font-semibold text-white mb-4">
               Add Chain Configuration
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Chain ID
                 </label>
                 <input
@@ -3401,11 +3136,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingChain}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Name
                 </label>
                 <input
@@ -3418,11 +3153,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingChain}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Processor
                 </label>
                 <select
@@ -3434,14 +3169,14 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingChain}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 >
                   <option value="internal">Internal</option>
                   <option value="pdm">PDM</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Status
                 </label>
                 <select
@@ -3453,7 +3188,7 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingChain}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -3471,7 +3206,7 @@ export const SettingsManagement: React.FC = () => {
                       })
                     }
                     disabled={isSubmittingChain}
-                    className="rounded border-gray-500 disabled:opacity-50"
+                    className="rounded border-slate-600 bg-slate-800 text-red-500 focus:ring-red-500/20 disabled:opacity-50"
                   />
                   <span className="text-white">Testnet</span>
                 </label>
@@ -3481,14 +3216,14 @@ export const SettingsManagement: React.FC = () => {
               <button
                 onClick={() => setShowChainModal(false)}
                 disabled={isSubmittingChain}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 border border-slate-600"
               >
                 Cancel
               </button>
               <button
                 onClick={() => addNewConfig("chain")}
                 disabled={isSubmittingChain}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg disabled:opacity-50"
               >
                 {isSubmittingChain ? "Adding..." : "Add"}
               </button>
@@ -3499,13 +3234,13 @@ export const SettingsManagement: React.FC = () => {
 
       {showSystemModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-lg">
             <h3 className="text-lg font-semibold text-white mb-4">
               Add System Configuration
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Config Key
                 </label>
                 <input
@@ -3518,11 +3253,11 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingSystem}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Config Value
                 </label>
                 <div className="space-y-2">
@@ -3545,7 +3280,7 @@ export const SettingsManagement: React.FC = () => {
                           }}
                           placeholder="Key"
                           disabled={isSubmittingSystem}
-                          className="w-1/2 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                          className="w-1/2 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                         />
                         <input
                           type="text"
@@ -3568,7 +3303,7 @@ export const SettingsManagement: React.FC = () => {
                           }}
                           placeholder="Value (JSON)"
                           disabled={isSubmittingSystem}
-                          className="w-1/2 bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                          className="w-1/2 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                         />
                         <button
                           onClick={() => {
@@ -3600,7 +3335,7 @@ export const SettingsManagement: React.FC = () => {
                       })
                     }
                     disabled={isSubmittingSystem}
-                    className="text-purple-400 hover:text-purple-300 text-sm flex items-center space-x-1 disabled:opacity-50"
+                    className="text-red-400 hover:text-red-300 text-sm flex items-center space-x-1 disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Add Field</span>
@@ -3608,7 +3343,7 @@ export const SettingsManagement: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Description
                 </label>
                 <textarea
@@ -3620,18 +3355,18 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingSystem}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 h-20 resize-none disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 h-20 resize-none disabled:opacity-50"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Brand (Optional)
                 </label>
                 <select
                   value={selectedBrandId || ""}
                   onChange={(e) => setSelectedBrandId(e.target.value || null)}
                   disabled={isSubmittingSystem}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 >
                   {brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>
@@ -3639,7 +3374,7 @@ export const SettingsManagement: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   Select a brand for brand-specific configuration
                 </p>
               </div>
@@ -3648,14 +3383,14 @@ export const SettingsManagement: React.FC = () => {
               <button
                 onClick={() => setShowSystemModal(false)}
                 disabled={isSubmittingSystem}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 border border-slate-600"
               >
                 Cancel
               </button>
               <button
                 onClick={() => addNewConfig("system")}
                 disabled={isSubmittingSystem}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg disabled:opacity-50"
               >
                 {isSubmittingSystem ? "Adding..." : "Add"}
               </button>
@@ -3666,11 +3401,11 @@ export const SettingsManagement: React.FC = () => {
 
       {showConfirmDeleteModal && configToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-white mb-4">
               Confirm Deletion
             </h3>
-            <p className="text-gray-300 mb-6">
+            <p className="text-slate-300 mb-6">
               Are you sure you want to delete the {configToDelete.type}{" "}
               configuration "{configToDelete.name || configToDelete.id}"? This
               action cannot be undone.
@@ -3682,7 +3417,7 @@ export const SettingsManagement: React.FC = () => {
                   setConfigToDelete(null);
                 }}
                 disabled={isDeletingConfig}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 border border-slate-600"
               >
                 Cancel
               </button>
@@ -3700,13 +3435,13 @@ export const SettingsManagement: React.FC = () => {
 
       {showFundTransferModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-lg">
             <h3 className="text-lg font-semibold text-white mb-4">
               Move Funds to Hot Wallet
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Chain ID
                 </label>
                 <select
@@ -3722,7 +3457,7 @@ export const SettingsManagement: React.FC = () => {
                     })
                   }
                   disabled={isSubmittingFundTransfer}
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                 >
                   <option value="">Select Chain</option>
                   {supportedChains.map((chain) => (
@@ -3736,7 +3471,7 @@ export const SettingsManagement: React.FC = () => {
 
               {fundTransfer.chain_id && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
                     Network
                   </label>
                   <select
@@ -3751,7 +3486,7 @@ export const SettingsManagement: React.FC = () => {
                       })
                     }
                     disabled={isSubmittingFundTransfer}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                   >
                     <option value="">Select Network</option>
                     {supportedChains
@@ -3767,7 +3502,7 @@ export const SettingsManagement: React.FC = () => {
 
               {fundTransfer.network && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
                     Crypto Currency
                   </label>
                   <select
@@ -3781,7 +3516,7 @@ export const SettingsManagement: React.FC = () => {
                       })
                     }
                     disabled={isSubmittingFundTransfer}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                   >
                     <option value="">Select Currency</option>
                     {supportedChains
@@ -3798,7 +3533,7 @@ export const SettingsManagement: React.FC = () => {
               {fundTransfer.crypto_currency && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
                       Hot Wallet
                     </label>
                     <select
@@ -3810,7 +3545,7 @@ export const SettingsManagement: React.FC = () => {
                         })
                       }
                       disabled={isSubmittingFundTransfer}
-                      className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                      className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                     >
                       <option value="">Select Hot Wallet</option>
                       {hotWalletData
@@ -3828,7 +3563,7 @@ export const SettingsManagement: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
                       Cold Wallet
                     </label>
                     <select
@@ -3840,7 +3575,7 @@ export const SettingsManagement: React.FC = () => {
                         })
                       }
                       disabled={isSubmittingFundTransfer}
-                      className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                      className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                     >
                       <option value="">Select Cold Wallet</option>
                       {coldWalletData
@@ -3858,7 +3593,7 @@ export const SettingsManagement: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
                       Amount
                     </label>
                     <input
@@ -3872,7 +3607,7 @@ export const SettingsManagement: React.FC = () => {
                         })
                       }
                       disabled={isSubmittingFundTransfer}
-                      className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 disabled:opacity-50"
+                      className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 disabled:opacity-50"
                     />
                   </div>
                 </>
@@ -3882,14 +3617,14 @@ export const SettingsManagement: React.FC = () => {
               <button
                 onClick={() => setShowFundTransferModal(false)}
                 disabled={isSubmittingFundTransfer}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl disabled:opacity-50 border border-slate-600"
               >
                 Cancel
               </button>
               <button
                 onClick={initiateFundTransfer}
                 disabled={isSubmittingFundTransfer}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg disabled:opacity-50"
               >
                 {isSubmittingFundTransfer ? "Transferring..." : "Transfer"}
               </button>
@@ -3901,14 +3636,14 @@ export const SettingsManagement: React.FC = () => {
       {/* Create/Edit IP Rule Modal */}
       {showCreateRuleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-md">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-white mb-6">
               {editingRule ? "Edit Access Rule" : "Create New Access Rule"}
             </h3>
 
             <form onSubmit={handleCreateRule} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Rule Type
                 </label>
                 <select
@@ -3919,7 +3654,7 @@ export const SettingsManagement: React.FC = () => {
                       type: e.target.value as "allow" | "block",
                     }))
                   }
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2"
                   required
                 >
                   <option value="block">Block</option>
@@ -3928,7 +3663,7 @@ export const SettingsManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Target Type
                 </label>
                 <select
@@ -3940,7 +3675,7 @@ export const SettingsManagement: React.FC = () => {
                       value: "",
                     }))
                   }
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2"
                   required
                 >
                   <option value="ip">Single IP Address</option>
@@ -3950,7 +3685,7 @@ export const SettingsManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   {ruleFormData.target === "country"
                     ? "Country"
                     : ruleFormData.target === "range"
@@ -3966,7 +3701,7 @@ export const SettingsManagement: React.FC = () => {
                         value: e.target.value,
                       }))
                     }
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2"
                     required
                   >
                     <option value="">Select Country</option>
@@ -3986,7 +3721,7 @@ export const SettingsManagement: React.FC = () => {
                         value: e.target.value,
                       }))
                     }
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2"
                     placeholder={
                       ruleFormData.target === "range"
                         ? "e.g., 192.168.1.0-192.168.1.255"
@@ -3998,7 +3733,7 @@ export const SettingsManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-sm font-medium text-slate-400 mb-2">
                   Description
                 </label>
                 <textarea
@@ -4009,7 +3744,7 @@ export const SettingsManagement: React.FC = () => {
                       description: e.target.value,
                     }))
                   }
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 h-20 resize-none"
+                  className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 px-3 py-2 h-20 resize-none"
                   placeholder="Reason for this rule..."
                   required
                 />
@@ -4019,14 +3754,14 @@ export const SettingsManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={resetRuleForm}
-                  className="px-4 py-2 text-gray-400 hover:text-white"
+                  className="px-4 py-2 text-slate-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loadingIpRules}
-                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl flex items-center space-x-2"
                 >
                   {loadingIpRules && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -4048,7 +3783,7 @@ export const SettingsManagement: React.FC = () => {
       {/* Delete Rule Modal */}
       {showDeleteRuleModal && ruleToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-md">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 w-full max-w-md">
             <div className="flex items-center space-x-3 mb-4">
               <div className="flex-shrink-0">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -4059,19 +3794,19 @@ export const SettingsManagement: React.FC = () => {
                 <h3 className="text-lg font-semibold text-white">
                   Delete IP Filter
                 </h3>
-                <p className="text-gray-400 text-sm">
+                <p className="text-slate-400 text-sm">
                   This action cannot be undone.
                 </p>
               </div>
             </div>
 
             <div className="mb-6">
-              <p className="text-gray-300 mb-3">
+              <p className="text-slate-300 mb-3">
                 Are you sure you want to delete this IP filter?
               </p>
-              <div className="bg-gray-700 rounded-lg p-3">
+              <div className="bg-slate-800/60 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">Type:</span>
+                  <span className="text-sm text-slate-400">Type:</span>
                   <span
                     className={`px-2 py-1 rounded text-xs font-medium ${
                       ruleToDelete.type === "block"
@@ -4083,13 +3818,13 @@ export const SettingsManagement: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">Target:</span>
+                  <span className="text-sm text-slate-400">Target:</span>
                   <span className="text-white text-sm font-mono">
                     {ruleToDelete.value}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Description:</span>
+                  <span className="text-sm text-slate-400">Description:</span>
                   <span className="text-white text-sm">
                     {ruleToDelete.description || "No description"}
                   </span>
@@ -4104,7 +3839,7 @@ export const SettingsManagement: React.FC = () => {
                   setRuleToDelete(null);
                 }}
                 disabled={loadingIpRules}
-                className="px-4 py-2 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

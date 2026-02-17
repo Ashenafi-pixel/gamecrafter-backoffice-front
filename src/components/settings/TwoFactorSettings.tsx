@@ -20,7 +20,6 @@ import {
   twoFactorService,
   TwoFactorSettings,
   TwoFactorAuthSetupResponse,
-  TwoFactorMethodInfo,
 } from "../../services/twoFactorService";
 import toast from "react-hot-toast";
 import QRCode from "qrcode";
@@ -146,12 +145,11 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
   // Refresh passkey status
   const refreshPasskeyStatus = useCallback(async () => {
-    if (!twoFactorStatus?.user_id) return;
+    const userId = twoFactorStatus?.user_id;
+    if (!userId) return;
 
     try {
-      const passkeyResponse = await twoFactorService.listPasskeys(
-        twoFactorStatus.user_id,
-      );
+      const passkeyResponse = await twoFactorService.listPasskeys(userId);
       if (passkeyResponse.success && passkeyResponse.data) {
         setPasskeyCredentials(passkeyResponse.data);
       }
@@ -258,6 +256,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
     setIsEnabling2FA(true);
     setError(null);
     try {
+      const userId = twoFactorStatus?.user_id ?? userEmail;
       // Enable 2FA with secret and token verification
       await twoFactorService.enable2FA({
         secret: secretData.secret,
@@ -270,7 +269,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
           method: "totp",
           data: { secret: secretData.secret },
         },
-        twoFactorStatus.user_id,
+        userId,
       );
 
       // Automatically enable backup codes when TOTP is enabled
@@ -278,7 +277,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
         {
           method: "backup_codes",
         },
-        twoFactorStatus.user_id,
+        userId,
       );
 
       // Update the enabled methods list
@@ -401,7 +400,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
           setEnabledMethods((prev) => [...prev, method]);
           await twoFactorService.enableMethod(
             { method },
-            twoFactorStatus.user_id,
+            twoFactorStatus?.user_id ?? userEmail,
           );
           toast.success(
             `${availableMethods.find((m) => m.id === method)?.name} enabled successfully`,
@@ -412,7 +411,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
           setEnabledMethods((prev) => [...prev, method]);
           await twoFactorService.enableMethod(
             { method },
-            twoFactorStatus.user_id,
+            twoFactorStatus?.user_id ?? userEmail,
           );
           toast.success(
             `${availableMethods.find((m) => m.id === method)?.name} enabled successfully`,
@@ -449,7 +448,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
           method,
           verification_data: verificationToken,
         },
-        twoFactorStatus.user_id,
+        twoFactorStatus?.user_id ?? userEmail,
       );
 
       toast.success(
@@ -512,13 +511,13 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
             userVerification: "required",
           },
           timeout: 60000,
-          attestation: "direct",
+          attestation: "direct" as AttestationConveyancePreference,
         },
       };
 
       // Create the credential
       const credential = (await navigator.credentials.create(
-        createOptions,
+        createOptions as CredentialCreationOptions,
       )) as PublicKeyCredential;
 
       if (credential) {
@@ -601,7 +600,7 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
       // Get the assertion
       const assertion = (await navigator.credentials.get(
-        options,
+        options as CredentialRequestOptions,
       )) as PublicKeyCredential;
 
       if (assertion) {
@@ -626,8 +625,8 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
                     .signature,
                 ),
               ),
-              userHandle: assertion.response.userHandle
-                ? Array.from(new Uint8Array(assertion.response.userHandle))
+              userHandle: (assertion.response as AuthenticatorAssertionResponse).userHandle
+                ? Array.from(new Uint8Array((assertion.response as AuthenticatorAssertionResponse).userHandle!))
                 : null,
             },
             type: assertion.type,
@@ -654,50 +653,64 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <RefreshCw className="h-6 w-6 animate-spin text-purple-500" />
-        <span className="ml-2 text-gray-400">Loading 2FA settings...</span>
+      <div className="flex items-center justify-center p-8 rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80">
+        <RefreshCw className="h-6 w-6 animate-spin text-red-500" />
+        <span className="ml-2 text-slate-400 text-sm">Loading 2FA settings...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center space-x-3">
-        <Shield className="h-6 w-6 text-purple-500" />
-        <h2 className="text-xl font-semibold text-white">
-          Two-Factor Authentication
-        </h2>
-      </div>
-
+    <div className="space-y-6">
+      {/* Header card */}
+      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+        <div className="px-6 py-4 border-b border-slate-700/80 flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/50">
+            <Shield className="h-6 w-6 text-red-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-white">
+            Two-factor authentication
+          </h2>
+        </div>
+        <div className="p-4 md:p-6 space-y-4">
       {error && (
-        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <XCircle className="h-5 w-5 text-red-400" />
-            <span className="text-red-400 font-medium">{error}</span>
+        <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-5 w-5 text-red-400 shrink-0" />
+            <span className="text-red-400 text-sm font-medium">{error}</span>
           </div>
         </div>
       )}
 
       {success && (
-        <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <CheckCircle className="h-5 w-5 text-green-400" />
-            <span className="text-green-400 font-medium">{success}</span>
+        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-emerald-400 shrink-0" />
+            <span className="text-emerald-400 text-sm font-medium">{success}</span>
           </div>
         </div>
       )}
 
       {/* Multiple 2FA Methods */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">
-          Available Authentication Methods
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 md:p-6 backdrop-blur-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-medium text-slate-200 uppercase tracking-wider">
+              Available authentication methods
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Combine methods to balance convenience and account security.
+            </p>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400/80" />
+            <span>Recommended: App + backup codes</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {availableMethods.map((method) => {
             const IconComponent = method.icon;
-            // Backup codes are automatically enabled when TOTP is enabled
-            // Passkeys are enabled if user has registered any passkeys
             const isEnabled =
               enabledMethods.includes(method.id) ||
               (method.id === "backup_codes" &&
@@ -708,43 +721,44 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
             return (
               <div
                 key={method.id}
-                className={`border rounded-lg p-4 transition-all duration-200 ${
+                className={`rounded-2xl border p-4 md:p-5 transition-all duration-200 shadow-sm ${
                   !is2FAEnabled &&
                   (method.id === "totp" || method.id === "backup_codes")
-                    ? "border-purple-600 bg-purple-900/10 hover:border-purple-500"
+                    ? "border-red-500/50 bg-red-500/10 hover:border-red-500/70 shadow-red-500/10"
                     : isEnabled
-                      ? "border-green-600 bg-green-900/10"
+                      ? "border-emerald-500/40 bg-emerald-500/10 shadow-emerald-500/10"
                       : isCurrentlySelected
-                        ? "border-purple-600 bg-purple-900/10"
+                        ? "border-red-500/50 bg-red-500/10 shadow-red-500/10"
                         : method.enabled
-                          ? "border-gray-600 bg-gray-700/50 hover:border-gray-500"
-                          : "border-gray-700 bg-gray-800/50 opacity-50"
+                          ? "border-slate-700 bg-slate-900/70 hover:border-slate-500"
+                          : "border-slate-800 bg-slate-900/40 opacity-60"
                 }`}
               >
-                <div className="flex items-start space-x-3">
+                <div className="flex items-start gap-3">
                   <div
-                    className={`p-2 rounded-lg ${
+                    className={`p-2.5 rounded-xl shrink-0 ${
                       !is2FAEnabled &&
                       (method.id === "totp" || method.id === "backup_codes")
-                        ? "bg-purple-600"
+                        ? "bg-red-500"
                         : isEnabled
-                          ? "bg-green-600"
+                          ? "bg-emerald-500"
                           : isCurrentlySelected
-                            ? "bg-purple-600"
-                            : "bg-gray-600"
+                            ? "bg-red-500"
+                            : "bg-slate-600"
                     }`}
                   >
-                    <IconComponent className="h-5 w-5 text-white" />
+                    <IconComponent className="h-5 w-5 text-white drop-shadow" />
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-white font-medium">{method.name}</h4>
-                    <p className="text-gray-400 text-sm mt-1">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-white font-medium leading-snug">
+                      {method.name}
+                    </h4>
+                    <p className="text-slate-400 text-xs md:text-sm mt-1">
                       {method.description}
                     </p>
 
-                    <div className="mt-3 flex space-x-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {!is2FAEnabled ? (
-                        // When 2FA is globally disabled, show Enable buttons for TOTP and Backup Codes
                         method.id === "totp" || method.id === "backup_codes" ? (
                           <button
                             onClick={() =>
@@ -752,51 +766,47 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
                                 ? handleGenerateSecret()
                                 : null
                             }
-                            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md transition-colors"
+                            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-xl transition-colors"
                           >
                             Enable
                           </button>
                         ) : method.enabled ? (
                           <button
                             onClick={() => handleEnableMethod(method.id)}
-                            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md transition-colors"
+                            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-xl transition-colors"
                           >
                             Enable
                           </button>
                         ) : (
-                          <span className="px-3 py-1 bg-gray-600 text-gray-400 text-sm rounded-md">
+                          <span className="px-3 py-1.5 bg-slate-700 text-slate-400 text-sm rounded-xl">
                             Coming Soon
                           </span>
                         )
-                      ) : // When 2FA is globally enabled, show status or disable buttons
-                      !isEnabled && method.enabled ? (
+                      ) : !isEnabled && method.enabled ? (
                         <button
                           onClick={() => handleEnableMethod(method.id)}
-                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-md transition-colors"
+                          className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-xl transition-colors"
                         >
                           Enable
                         </button>
                       ) : isEnabled ? (
-                        // Don't show disable button for backup codes when TOTP is enabled
                         method.id === "backup_codes" &&
                         enabledMethods.includes("totp") ? (
-                          <span className="px-3 py-1 bg-green-600 text-green-100 text-sm rounded-md">
+                          <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 text-sm rounded-xl border border-emerald-500/30">
                             Auto-enabled with TOTP
                           </span>
                         ) : method.id === "totp" ? (
-                          // Don't show disable button for TOTP - use main "Disable 2FA" section instead
-                          <span className="px-3 py-1 bg-green-600 text-green-100 text-sm rounded-md">
-                            Use "Disable 2FA" below
+                          <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 text-sm rounded-xl border border-emerald-500/30">
+                            Use &quot;Disable 2FA&quot; below
                           </span>
                         ) : method.id === "passkey" ? (
-                          // Show number of registered passkeys
-                          <span className="px-3 py-1 bg-green-600 text-green-100 text-sm rounded-md">
+                          <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 text-sm rounded-xl border border-emerald-500/30">
                             {passkeyCredentials.length} registered
                           </span>
                         ) : (
                           <button
                             onClick={() => handleDisableMethod(method.id)}
-                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded-md transition-colors"
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-xl transition-colors"
                           >
                             Disable
                           </button>
@@ -813,14 +823,16 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
       {/* Current Status */}
       {setupStep === "status" && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 md:p-6 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Current Status</h3>
+            <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
+              Current status
+            </h3>
             <div
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium ${
                 is2FAEnabled
-                  ? "bg-green-900/20 text-green-400 border border-green-700"
-                  : "bg-yellow-900/20 text-yellow-400 border border-yellow-700"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                  : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
               }`}
             >
               {is2FAEnabled ? "Enabled" : "Disabled"}
@@ -829,22 +841,21 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
           {is2FAEnabled ? (
             <div className="space-y-4">
-              <div className="flex items-center space-x-3 text-green-400">
-                <CheckCircle className="h-5 w-5" />
-                <span>Two-factor authentication is enabled</span>
+              <div className="flex items-center gap-3 text-emerald-400">
+                <CheckCircle className="h-5 w-5 shrink-0" />
+                <span className="text-sm">Two-factor authentication is enabled</span>
               </div>
               {twoFactorStatus?.enabled_at && (
-                <p className="text-gray-400 text-sm">
-                  Enabled on:{" "}
-                  {new Date(twoFactorStatus.enabled_at).toLocaleString()}
+                <p className="text-slate-400 text-sm">
+                  Enabled on: {new Date(twoFactorStatus.enabled_at).toLocaleString()}
                 </p>
               )}
 
-              <div className="pt-4 border-t border-gray-700">
-                <h4 className="text-white font-medium mb-3">Disable 2FA</h4>
+              <div className="pt-4 border-t border-slate-700/80">
+                <h4 className="text-slate-200 font-medium mb-3">Disable 2FA</h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
                       Enter verification code from your authenticator app
                     </label>
                     <input
@@ -853,49 +864,44 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
                       onChange={(e) => setDisableToken(e.target.value)}
                       placeholder="000000"
                       maxLength={6}
-                      className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                     />
                   </div>
                   <button
                     onClick={handleDisable2FA}
                     disabled={isDisabling2FA || !disableToken}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                   >
                     {isDisabling2FA ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
                     ) : (
                       <XCircle className="h-4 w-4" />
                     )}
-                    <span>
-                      {isDisabling2FA ? "Disabling..." : "Disable 2FA"}
-                    </span>
+                    {isDisabling2FA ? "Disabling..." : "Disable 2FA"}
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center space-x-3 text-yellow-400">
-                <AlertTriangle className="h-5 w-5" />
-                <span>Two-factor authentication is not enabled</span>
+              <div className="flex items-center gap-3 text-amber-400">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <span className="text-sm">Two-factor authentication is not enabled</span>
               </div>
-              <p className="text-gray-400">
-                Add an extra layer of security to your account by enabling
-                two-factor authentication.
+              <p className="text-slate-400 text-sm">
+                Add an extra layer of security to your account by enabling two-factor authentication.
               </p>
               <button
                 onClick={handleGenerateSecret}
                 disabled={isGeneratingSecret}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 shadow-lg shadow-red-500/20"
               >
                 {isGeneratingSecret ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
                 ) : (
                   <Shield className="h-4 w-4" />
                 )}
-                <span>
-                  {isGeneratingSecret ? "Generating..." : "Enable 2FA"}
-                </span>
+                {isGeneratingSecret ? "Generating..." : "Enable 2FA"}
               </button>
             </div>
           )}
@@ -904,83 +910,68 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
       {/* Setup Flow - Generate Secret */}
       {setupStep === "generate" && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Generate 2FA Secret
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+          <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-4">
+            Generate 2FA secret
           </h3>
           <button
             onClick={handleGenerateSecret}
             disabled={isGeneratingSecret}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {isGeneratingSecret ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            <span>
-              {isGeneratingSecret ? "Generating..." : "Generate Secret"}
-            </span>
+            {isGeneratingSecret ? "Generating..." : "Generate secret"}
           </button>
         </div>
       )}
 
       {/* Setup Flow - Verify and Enable */}
       {setupStep === "verify" && secretData && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Complete 2FA Setup
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+          <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-4">
+            Complete 2FA setup
           </h3>
 
           <div className="space-y-6">
-            {/* QR Code */}
             <div className="text-center">
-              <h4 className="text-white font-medium mb-3">Scan QR Code</h4>
-              <div className="bg-white p-4 rounded-lg inline-block">
+              <h4 className="text-slate-200 font-medium mb-3">Scan QR code</h4>
+              <div className="bg-white p-4 rounded-xl inline-block">
                 {qrCodeImage ? (
-                  <img
-                    src={qrCodeImage}
-                    alt="2FA QR Code"
-                    className="w-48 h-48"
-                  />
+                  <img src={qrCodeImage} alt="2FA QR Code" className="w-48 h-48" />
                 ) : (
-                  <div className="w-48 h-48 flex items-center justify-center text-gray-500">
+                  <div className="w-48 h-48 flex items-center justify-center text-slate-500">
                     <RefreshCw className="w-8 h-8 animate-spin" />
                   </div>
                 )}
               </div>
-              <p className="text-gray-400 text-sm mt-2">
-                Scan this QR code with your authenticator app (Google
-                Authenticator, Authy, etc.)
+              <p className="text-slate-400 text-sm mt-2">
+                Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
               </p>
             </div>
 
-            {/* Manual Secret */}
             <div>
-              <h4 className="text-white font-medium mb-3">Manual Entry</h4>
-              <div className="bg-gray-700 rounded-lg p-4">
+              <h4 className="text-slate-200 font-medium mb-3">Manual entry</h4>
+              <div className="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-400 text-sm">Secret Key:</span>
+                  <span className="text-slate-400 text-sm">Secret key</span>
                   <button
                     onClick={() => setShowSecret(!showSecret)}
-                    className="text-gray-400 hover:text-white"
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50"
                   >
-                    {showSecret ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <code className="text-white font-mono text-sm bg-gray-800 px-2 py-1 rounded flex-1">
-                    {showSecret
-                      ? secretData.secret
-                      : "••••••••••••••••••••••••••••••••"}
+                <div className="flex items-center gap-2">
+                  <code className="text-white font-mono text-sm bg-slate-800 px-2 py-1 rounded-lg flex-1">
+                    {showSecret ? secretData.secret : "••••••••••••••••••••••••••••••••"}
                   </code>
                   <button
                     onClick={() => copyToClipboard(secretData.secret)}
-                    className="text-gray-400 hover:text-white"
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50"
                   >
                     <Copy className="h-4 w-4" />
                   </button>
@@ -988,12 +979,11 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
               </div>
             </div>
 
-            {/* Verification */}
             <div>
-              <h4 className="text-white font-medium mb-3">Verify Setup</h4>
+              <h4 className="text-slate-200 font-medium mb-3">Verify setup</h4>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
                     Enter the 6-digit code from your authenticator app
                   </label>
                   <input
@@ -1002,25 +992,25 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
                     onChange={(e) => setVerificationToken(e.target.value)}
                     placeholder="000000"
                     maxLength={6}
-                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full bg-slate-950/60 text-white border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-red-500/20 focus:border-red-500 placeholder-slate-500"
                   />
                 </div>
-                <div className="flex space-x-3">
+                <div className="flex gap-3">
                   <button
                     onClick={handleEnable2FA}
                     disabled={isEnabling2FA || !verificationToken}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                   >
                     {isEnabling2FA ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
                     ) : (
                       <CheckCircle className="h-4 w-4" />
                     )}
-                    <span>{isEnabling2FA ? "Enabling..." : "Enable 2FA"}</span>
+                    {isEnabling2FA ? "Enabling..." : "Enable 2FA"}
                   </button>
                   <button
                     onClick={resetSetup}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
+                    className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-medium border border-slate-600"
                   >
                     Cancel
                   </button>
@@ -1033,62 +1023,56 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
 
       {/* Setup Complete - Backup Codes */}
       {setupStep === "complete" && backupCodes.length > 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            2FA Setup Complete!
+        <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+          <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-4">
+            2FA setup complete
           </h3>
 
           <div className="space-y-4">
-            <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                <span className="text-yellow-400 font-medium">
-                  Important: Save Your Backup Codes
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+                <span className="text-amber-400 font-medium text-sm">
+                  Important: save your backup codes
                 </span>
               </div>
-              <p className="text-gray-300 text-sm">
-                These backup codes can be used to access your account if you
-                lose your authenticator device. Each code can only be used once.
-                Store them in a safe place.
+              <p className="text-slate-300 text-sm">
+                These backup codes can be used to access your account if you lose your authenticator device. Each code can only be used once. Store them in a safe place.
               </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-white font-medium">Backup Codes</h4>
-                <div className="flex space-x-2">
+                <h4 className="text-slate-200 font-medium">Backup codes</h4>
+                <div className="flex gap-2">
                   <button
                     onClick={() => setShowBackupCodes(!showBackupCodes)}
-                    className="text-gray-400 hover:text-white"
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50"
                   >
-                    {showBackupCodes ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showBackupCodes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                   <button
                     onClick={downloadBackupCodes}
-                    className="text-gray-400 hover:text-white"
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50"
                   >
                     <Download className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
-              <div className="bg-gray-700 rounded-lg p-4">
+              <div className="bg-slate-950/60 border border-slate-700/80 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-2">
                   {backupCodes.map((code, index) => (
                     <div
                       key={index}
-                      className="flex items-center justify-between bg-gray-800 px-3 py-2 rounded"
+                      className="flex items-center justify-between bg-slate-800/80 px-3 py-2 rounded-lg"
                     >
                       <span className="text-white font-mono text-sm">
                         {showBackupCodes ? code : "••••••••"}
                       </span>
                       <button
                         onClick={() => copyToClipboard(code)}
-                        className="text-gray-400 hover:text-white"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50"
                       >
                         <Copy className="h-3 w-3" />
                       </button>
@@ -1105,9 +1089,9 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
                   setIs2FAEnabled(true);
                   load2FAStatus();
                 }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium"
               >
-                Complete Setup
+                Complete setup
               </button>
             </div>
           </div>
@@ -1115,138 +1099,69 @@ export const TwoFactorAuthSettings: React.FC<TwoFactorAuthSettingsProps> = ({
       )}
 
       {/* Help Section */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">
-          Supported Authenticator Apps
+      <div className="bg-slate-800/50 border border-slate-700/80 rounded-xl p-6">
+        <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-4">
+          Supported authenticator apps
         </h3>
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">G</span>
+            {[
+              { letter: "G", name: "Google Authenticator", desc: "Free authenticator app by Google. Available on iOS and Android.", bg: "bg-slate-600" },
+              { letter: "A", name: "Authy", desc: "Multi-device authenticator with cloud backup. Cross-platform support.", bg: "bg-red-500/80" },
+              { letter: "M", name: "Microsoft Authenticator", desc: "Microsoft's authenticator app with push notifications and backup.", bg: "bg-slate-600" },
+              { letter: "1", name: "1Password", desc: "Password manager with built-in authenticator functionality.", bg: "bg-emerald-600/80" },
+              { letter: "B", name: "Bitwarden", desc: "Open-source password manager with authenticator features.", bg: "bg-slate-600" },
+              { letter: "L", name: "LastPass Authenticator", desc: "Authenticator app by LastPass with cloud sync capabilities.", bg: "bg-slate-600" },
+            ].map((app) => (
+              <div key={app.name} className="flex items-start gap-3">
+                <div className={`w-8 h-8 ${app.bg} rounded-xl flex items-center justify-center shrink-0`}>
+                  <span className="text-white font-bold text-sm">{app.letter}</span>
+                </div>
+                <div>
+                  <h4 className="text-white font-medium">{app.name}</h4>
+                  <p className="text-slate-400 text-sm mt-0.5">{app.desc}</p>
+                </div>
               </div>
-              <div>
-                <h4 className="text-white font-medium">Google Authenticator</h4>
-                <p className="text-gray-400 text-sm">
-                  Free authenticator app by Google. Available on iOS and
-                  Android.
-                </p>
-              </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">A</span>
-              </div>
+          <div className="mt-6 p-4 bg-slate-900/60 border border-slate-700/80 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Smartphone className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
               <div>
-                <h4 className="text-white font-medium">Authy</h4>
-                <p className="text-gray-400 text-sm">
-                  Multi-device authenticator with cloud backup. Cross-platform
-                  support.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">M</span>
-              </div>
-              <div>
-                <h4 className="text-white font-medium">
-                  Microsoft Authenticator
-                </h4>
-                <p className="text-gray-400 text-sm">
-                  Microsoft's authenticator app with push notifications and
-                  backup.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">1</span>
-              </div>
-              <div>
-                <h4 className="text-white font-medium">1Password</h4>
-                <p className="text-gray-400 text-sm">
-                  Password manager with built-in authenticator functionality.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">B</span>
-              </div>
-              <div>
-                <h4 className="text-white font-medium">Bitwarden</h4>
-                <p className="text-gray-400 text-sm">
-                  Open-source password manager with authenticator features.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 bg-gray-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">L</span>
-              </div>
-              <div>
-                <h4 className="text-white font-medium">
-                  LastPass Authenticator
-                </h4>
-                <p className="text-gray-400 text-sm">
-                  Authenticator app by LastPass with cloud sync capabilities.
+                <h4 className="text-slate-200 font-medium">How to use</h4>
+                <p className="text-slate-400 text-sm mt-1">
+                  Any of these authenticator apps will work. Simply scan the QR code or enter the secret key manually. All apps generate the same 6-digit codes that change every 30 seconds.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <Smartphone className="h-5 w-5 text-blue-400 mt-0.5" />
+          <div className="mt-4 p-4 bg-slate-900/60 border border-slate-700/80 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Key className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
               <div>
-                <h4 className="text-blue-400 font-medium">How to Use</h4>
-                <p className="text-gray-300 text-sm mt-1">
-                  Any of these authenticator apps will work with TucanBIT.
-                  Simply scan the QR code or enter the secret key manually. All
-                  apps generate the same 6-digit codes that change every 30
-                  seconds.
+                <h4 className="text-slate-200 font-medium">Backup codes</h4>
+                <p className="text-slate-400 text-sm mt-1">
+                  Save your backup codes securely. These one-time use codes can access your account if you lose your authenticator device. Each code can only be used once.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <Key className="h-5 w-5 text-green-400 mt-0.5" />
+          <div className="mt-4 p-4 bg-slate-900/60 border border-slate-700/80 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
               <div>
-                <h4 className="text-green-400 font-medium">Backup Codes</h4>
-                <p className="text-gray-300 text-sm mt-1">
-                  Save your backup codes securely! These one-time use codes can
-                  access your account if you lose your authenticator device.
-                  Each code can only be used once, so store them in a safe
-                  place.
+                <h4 className="text-slate-200 font-medium">Security features</h4>
+                <p className="text-slate-400 text-sm mt-1">
+                  2FA uses industry-standard TOTP (Time-based One-Time Password) with SHA-1. Your codes are generated locally on your device and never transmitted over the network.
                 </p>
               </div>
             </div>
           </div>
-
-          <div className="mt-4 p-4 bg-purple-900/20 border border-purple-700 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <Shield className="h-5 w-5 text-purple-400 mt-0.5" />
-              <div>
-                <h4 className="text-purple-400 font-medium">
-                  Security Features
-                </h4>
-                <p className="text-gray-300 text-sm mt-1">
-                  TucanBIT's 2FA uses industry-standard TOTP (Time-based
-                  One-Time Password) with SHA-1 algorithm. Your codes are
-                  generated locally on your device and never transmitted over
-                  the network.
-                </p>
-              </div>
-            </div>
-          </div>
+        </div>
+      </div>
         </div>
       </div>
     </div>
