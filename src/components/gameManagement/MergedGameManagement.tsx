@@ -164,6 +164,8 @@ const MergedGameManagement: React.FC = () => {
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
   const [editProviderSearch, setEditProviderSearch] = useState("");
+  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+  const [showEditProviderDropdown, setShowEditProviderDropdown] = useState(false);
 
   // Helper functions
   const getStatusColor = (status: string) => {
@@ -756,13 +758,26 @@ const MergedGameManagement: React.FC = () => {
       ) {
         closeDropdown();
       }
+      // Close provider dropdowns when clicking outside
+      if (
+        showProviderDropdown &&
+        !(event.target as Element).closest(".provider-dropdown-container")
+      ) {
+        setShowProviderDropdown(false);
+      }
+      if (
+        showEditProviderDropdown &&
+        !(event.target as Element).closest(".edit-provider-dropdown-container")
+      ) {
+        setShowEditProviderDropdown(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [activeDropdown]);
+  }, [activeDropdown, showProviderDropdown, showEditProviderDropdown]);
 
   // KPI counts for Games tab (from current page for active/enabled)
   const gamesActiveCount = games.filter((g) => g.status === "ACTIVE").length;
@@ -1660,50 +1675,87 @@ const MergedGameManagement: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
-                <div>
+                <div className="relative provider-dropdown-container">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Provider *
                   </label>
-                  <div className="space-y-2">
+                  <div className="relative">
                     <input
                       type="text"
                       placeholder="Search provider by name or code..."
-                      value={providerSearch}
-                      onChange={(e) => setProviderSearch(e.target.value)}
+                      value={providerSearch || providers.find(p => p.id === newGame.provider_id)?.name || ""}
+                      onChange={(e) => {
+                        setProviderSearch(e.target.value);
+                        setShowProviderDropdown(true);
+                        if (!e.target.value) {
+                          setNewGame((prev) => ({ ...prev, provider_id: "" }));
+                          setShowProviderDropdown(false);
+                        }
+                      }}
+                      onFocus={() => {
+                        if (providers.length > 0 || providerSearch.length >= 1) {
+                          setShowProviderDropdown(true);
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
                     />
-                    <select
-                      value={newGame.provider_id}
-                      onChange={(e) =>
-                        setNewGame((prev) => ({
-                          ...prev,
-                          provider_id: e.target.value,
-                        }))
-                      }
-                      required
-                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      disabled={loadingProviders}
-                    >
-                      <option value="">Select a provider</option>
-                      {providers
-                        .filter((provider) => {
-                          const q = providerSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            provider.name.toLowerCase().includes(q) ||
-                            provider.code.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((provider) => (
-                          <option key={provider.id} value={provider.id}>
-                            {provider.name} ({provider.code})
-                          </option>
-                        ))}
-                    </select>
-                    {loadingProviders && (
-                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                    {showProviderDropdown && (providerSearch.length >= 1 || providers.length > 0) && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {loadingProviders ? (
+                          <div className="p-3 text-center text-slate-400 text-sm">
+                            Loading providers...
+                          </div>
+                        ) : providers
+                            .filter((provider) => {
+                              const q = providerSearch.trim().toLowerCase();
+                              if (!q) return true;
+                              return (
+                                provider.name.toLowerCase().includes(q) ||
+                                provider.code.toLowerCase().includes(q)
+                              );
+                            })
+                            .length > 0 ? (
+                          <>
+                            {providers
+                              .filter((provider) => {
+                                const q = providerSearch.trim().toLowerCase();
+                                if (!q) return true;
+                                return (
+                                  provider.name.toLowerCase().includes(q) ||
+                                  provider.code.toLowerCase().includes(q)
+                                );
+                              })
+                              .map((provider) => (
+                                <div
+                                  key={provider.id}
+                                  className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm"
+                                  onClick={() => {
+                                    setNewGame((prev) => ({
+                                      ...prev,
+                                      provider_id: provider.id,
+                                    }));
+                                    setProviderSearch(provider.name);
+                                    setShowProviderDropdown(false);
+                                  }}
+                                >
+                                  <div className="font-medium">{provider.name}</div>
+                                  <div className="text-xs text-slate-400">
+                                    Code: {provider.code}
+                                  </div>
+                                </div>
+                              ))}
+                          </>
+                        ) : providerSearch.length >= 1 ? (
+                          <div className="p-3 text-center text-slate-400 text-sm">
+                            No providers found
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </div>
+                  {loadingProviders && (
+                    <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
@@ -1849,45 +1901,84 @@ const MergedGameManagement: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
-                <div>
+                <div className="relative edit-provider-dropdown-container">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Provider *
                   </label>
-                  <div className="space-y-2">
+                  <div className="relative">
                     <input
                       type="text"
                       placeholder="Search provider by name or code..."
-                      value={editProviderSearch}
-                      onChange={(e) => setEditProviderSearch(e.target.value)}
+                      value={editProviderSearch || providers.find(p => p.id === editingProviderId)?.name || ""}
+                      onChange={(e) => {
+                        setEditProviderSearch(e.target.value);
+                        setShowEditProviderDropdown(true);
+                        if (!e.target.value) {
+                          setEditingProviderId("");
+                          setShowEditProviderDropdown(false);
+                        }
+                      }}
+                      onFocus={() => {
+                        if (providers.length > 0 || editProviderSearch.length >= 1) {
+                          setShowEditProviderDropdown(true);
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
                     />
-                    <select
-                      value={editingProviderId}
-                      onChange={(e) => setEditingProviderId(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      disabled={loadingProviders}
-                    >
-                      <option value="">Select a provider</option>
-                      {providers
-                        .filter((provider) => {
-                          const q = editProviderSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            provider.name.toLowerCase().includes(q) ||
-                            provider.code.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((provider) => (
-                          <option key={provider.id} value={provider.id}>
-                            {provider.name} ({provider.code})
-                          </option>
-                        ))}
-                    </select>
-                    {loadingProviders && (
-                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                    {showEditProviderDropdown && (editProviderSearch.length >= 1 || providers.length > 0) && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {loadingProviders ? (
+                          <div className="p-3 text-center text-slate-400 text-sm">
+                            Loading providers...
+                          </div>
+                        ) : providers
+                            .filter((provider) => {
+                              const q = editProviderSearch.trim().toLowerCase();
+                              if (!q) return true;
+                              return (
+                                provider.name.toLowerCase().includes(q) ||
+                                provider.code.toLowerCase().includes(q)
+                              );
+                            })
+                            .length > 0 ? (
+                          <>
+                            {providers
+                              .filter((provider) => {
+                                const q = editProviderSearch.trim().toLowerCase();
+                                if (!q) return true;
+                                return (
+                                  provider.name.toLowerCase().includes(q) ||
+                                  provider.code.toLowerCase().includes(q)
+                                );
+                              })
+                              .map((provider) => (
+                                <div
+                                  key={provider.id}
+                                  className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-white text-sm"
+                                  onClick={() => {
+                                    setEditingProviderId(provider.id);
+                                    setEditProviderSearch(provider.name);
+                                    setShowEditProviderDropdown(false);
+                                  }}
+                                >
+                                  <div className="font-medium">{provider.name}</div>
+                                  <div className="text-xs text-slate-400">
+                                    Code: {provider.code}
+                                  </div>
+                                </div>
+                              ))}
+                          </>
+                        ) : editProviderSearch.length >= 1 ? (
+                          <div className="p-3 text-center text-slate-400 text-sm">
+                            No providers found
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </div>
+                  {loadingProviders && (
+                    <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">

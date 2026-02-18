@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   XCircle,
   Link2,
-  FileText,
+  MoreVertical,
+  Eye,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
@@ -52,6 +53,7 @@ export default function ProviderManagement() {
   const [providerToDelete, setProviderToDelete] = useState<Provider | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(undefined);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     perPage: 10,
@@ -191,9 +193,36 @@ export default function ProviderManagement() {
     }
   };
 
+  const toggleDropdown = (id: string) => {
+    setActiveDropdown(activeDropdown === id ? null : id);
+  };
+
+  const closeDropdown = () => {
+    setActiveDropdown(null);
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        activeDropdown &&
+        !(event.target as Element).closest(".dropdown-container")
+      ) {
+        closeDropdown();
+      }
+    };
+
+    if (activeDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [activeDropdown]);
 
   return (
     <div className="space-y-6">
@@ -395,34 +424,51 @@ export default function ProviderManagement() {
                         {new Date(provider.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="relative dropdown-container flex justify-end">
                           <button
-                            onClick={() => {
-                              setViewingProvider(provider);
-                              setShowViewModal(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="View details"
+                            onClick={() => toggleDropdown(provider.id)}
+                            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors"
+                            title="Actions"
                           >
-                            <FileText className="w-4 h-4" />
+                            <MoreVertical className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setEditingProvider(provider);
-                              setShowEditModal(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProvider(provider)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+
+                          {activeDropdown === provider.id && (
+                            <div className="absolute right-0 mt-1 w-48 bg-slate-800/95 border border-slate-700 rounded-xl shadow-xl z-50 py-1 backdrop-blur-sm">
+                              <button
+                                onClick={() => {
+                                  setViewingProvider(provider);
+                                  setShowViewModal(true);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                              >
+                                <Eye className="h-4 w-4 mr-3" />
+                                View Details
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProvider(provider);
+                                  setShowEditModal(true);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                              >
+                                <Edit className="h-4 w-4 mr-3" />
+                                Edit Provider
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDeleteProvider(provider);
+                                  closeDropdown();
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-slate-700/80 hover:text-red-300 transition-colors"
+                              >
+                                <Trash2 className="h-4 w-4 mr-3" />
+                                Delete Provider
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

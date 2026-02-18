@@ -24,6 +24,7 @@ export interface CreateBrandRequest {
   webhook_url?: string;
   integration_type?: string;
   is_active?: boolean;
+  signature?: string;
 }
 
 export interface UpdateBrandRequest {
