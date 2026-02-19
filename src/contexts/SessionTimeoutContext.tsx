@@ -49,6 +49,10 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
   const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const isRefreshingRef = useRef(false);
+  const timerInitializedRef = useRef<boolean>(false);
+  const lastInitializedTimeRef = useRef<number>(0);
+  const lastActivityResetRef = useRef<number>(0);
+  const currentTimeRemainingRef = useRef<number>(8 * 60 * 60);
 
   const getDefaultBrandId = useCallback(async (): Promise<string | null> => {
     try {
@@ -130,6 +134,7 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
       clearTimeout(activityTimeoutRef.current);
       activityTimeoutRef.current = null;
     }
+    timerInitializedRef.current = false;
   }, []);
 
   const updateWarningLevel = useCallback((remaining: number) => {
@@ -147,8 +152,6 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
   }, []);
 
   const startSessionTimer = useCallback(() => {
-    clearAllTimers();
-
     if (!isAuthenticated) return;
 
     // Get time remaining from JWT token expiration
@@ -159,13 +162,35 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
       const secondsUntilExp = getSecondsUntilExpiration(accessToken);
       if (secondsUntilExp !== null && secondsUntilExp > 0) {
         initialTimeRemaining = secondsUntilExp;
-        console.log("Session timer initialized from token expiration:", initialTimeRemaining, "seconds");
       } else {
         console.warn("Token expired or invalid, using default session duration");
       }
     }
 
+    // Only log initialization once or if timer was cleared/reset (increase threshold to prevent spam)
+    const now = Date.now();
+    const timeSinceLastInit = now - lastInitializedTimeRef.current;
+    const shouldLog = !timerInitializedRef.current || timeSinceLastInit > 30000; // Log only if not initialized or 30+ seconds since last init
+    
+    if (shouldLog) {
+      console.log("Session timer initialized from token expiration:", initialTimeRemaining, "seconds");
+      lastInitializedTimeRef.current = now;
+    }
+
+    // Only clear and restart if timer is not already running or if time difference is significant
+    const currentTimeRemaining = currentTimeRemainingRef.current;
+    const timeDifference = Math.abs(initialTimeRemaining - currentTimeRemaining);
+    
+    // If timer is already running and time difference is small (< 10 seconds), don't restart
+    if (timerInitializedRef.current && sessionTimerRef.current && timeDifference < 10) {
+      return;
+    }
+
+    clearAllTimers();
+    timerInitializedRef.current = true;
+
     setTimeRemaining(initialTimeRemaining);
+    currentTimeRemainingRef.current = initialTimeRemaining;
     setShowWarning(false);
     setWarningLevel("none");
     setIsSessionExpired(false);
@@ -178,12 +203,14 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
           if (secondsUntilExp !== null) {
             // Use token expiration if it's more accurate
             if (Math.abs(secondsUntilExp - prev) > 5) {
+              currentTimeRemainingRef.current = secondsUntilExp;
               return secondsUntilExp;
             }
           }
         }
 
         const newTime = prev - 1;
+        currentTimeRemainingRef.current = newTime;
         updateWarningLevel(newTime);
 
         if (newTime <= 0) {
@@ -191,6 +218,7 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
           setIsSessionExpired(true);
           setShowWarning(true);
           setWarningLevel("expired");
+          currentTimeRemainingRef.current = 0;
           return 0;
         }
 
@@ -204,9 +232,26 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
   const handleActivity = useCallback(() => {
     if (!isAuthenticated || isSessionExpired) return;
 
-    lastActivityRef.current = Date.now();
+    const now = Date.now();
+    lastActivityRef.current = now;
 
-    startSessionTimer();
+    // Debounce: batch rapid activity events (mousemove, scroll, etc.) to prevent excessive timer resets
+    // Only reset timer after user activity has stopped for a brief period
+    if (activityTimeoutRef.current) {
+      clearTimeout(activityTimeoutRef.current);
+    }
+
+    activityTimeoutRef.current = setTimeout(() => {
+      // Only reset timer if:
+      // 1. Timer is not initialized, OR
+      // 2. Timer is not running, OR  
+      // 3. Enough time has passed since last reset (prevents spam on rapid events)
+      const timeSinceLastReset = Date.now() - lastActivityResetRef.current;
+      if (!timerInitializedRef.current || !sessionTimerRef.current || timeSinceLastReset > 10000) {
+        lastActivityResetRef.current = Date.now();
+        startSessionTimer();
+      }
+    }, 2000); // Wait 2 seconds after last activity before resetting timer
   }, [isAuthenticated, isSessionExpired, startSessionTimer]);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
@@ -244,6 +289,7 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
         const secondsUntilExp = getSecondsUntilExpiration(accessToken);
         if (secondsUntilExp !== null && secondsUntilExp > 0) {
           setTimeRemaining(secondsUntilExp);
+          currentTimeRemainingRef.current = secondsUntilExp;
           console.log("Updated session timer from new token:", secondsUntilExp, "seconds");
         }
         
@@ -290,6 +336,7 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
     setWarningLevel("none");
     setIsSessionExpired(true);
     setTimeRemaining(0);
+    currentTimeRemainingRef.current = 0;
     await authLogout();
   }, [clearAllTimers, authLogout]);
 
@@ -303,7 +350,9 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
         setShowWarning(false);
         setWarningLevel("none");
         setIsSessionExpired(false);
-        setTimeRemaining(getSessionDuration());
+        const duration = getSessionDuration();
+        setTimeRemaining(duration);
+        currentTimeRemainingRef.current = duration;
       } else {
         console.warn("Session refresh failed - but not logging out automatically");
         setShowWarning(true);
@@ -334,7 +383,9 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
     setShowWarning(false);
     setWarningLevel("none");
     setIsSessionExpired(false);
-    setTimeRemaining(getSessionDuration());
+    const duration = getSessionDuration();
+    setTimeRemaining(duration);
+    currentTimeRemainingRef.current = duration;
     startSessionTimer();
   }, [clearAllTimers, startSessionTimer, getSessionDuration]);
 
@@ -370,7 +421,9 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
       setShowWarning(false);
       setWarningLevel("none");
       setIsSessionExpired(false);
-      setTimeRemaining(getSessionDuration());
+      const duration = getSessionDuration();
+      setTimeRemaining(duration);
+      currentTimeRemainingRef.current = duration;
     }
   }, [isAuthenticated, clearAllTimers, getSessionDuration]);
 
@@ -383,6 +436,7 @@ export const SessionTimeoutProvider: React.FC<SessionTimeoutProviderProps> = ({
   useEffect(() => {
     if (isAuthenticated && sessionDuration > 0) {
       setTimeRemaining(sessionDuration);
+      currentTimeRemainingRef.current = sessionDuration;
       startSessionTimer();
     }
   }, [isAuthenticated, sessionDuration, startSessionTimer]);

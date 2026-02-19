@@ -143,9 +143,12 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
             ? parseFloat(form.withdrawal_all_time_limit)
             : undefined,
         withdrawal_limit_enabled: form.withdrawal_limit_enabled,
-        brand_id: form.brand_id || undefined,
+        // Ensure brand_id is sent as integer (not string) - form.brand_id contains the ID from select value
+        brand_id: form.brand_id && form.brand_id.trim() !== "" 
+          ? parseInt(form.brand_id, 10) 
+          : undefined,
       };
-      const res = await adminSvc.post("/players/register", payload);
+      const res = await adminSvc.post("/player-management", payload);
       if (res?.success) {
         toast.success("Player created");
         try {
