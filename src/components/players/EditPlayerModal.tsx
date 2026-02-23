@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { X, Save, User, Mail, Phone, MapPin, Shield } from "lucide-react";
 import { useServices } from "../../contexts/ServicesContext";
+import { playerManagementService } from "../../services/playerManagementService";
+import { UpdatePlayerRequest } from "../../types/playerManagement";
 import toast from "react-hot-toast";
 
 interface Player {
@@ -168,116 +170,60 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
     setLoading(true);
 
     try {
-      const response = await adminSvc.patch("/users", {
-        user_id: player.id,
-        username: formData.username, // Include username
-        email: formData.email,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        phone_number: formData.phoneNumber,
-        country: formData.country,
-        state: formData.state,
-        city: formData.city,
-        postal_code: formData.postalCode,
-        street_address: formData.streetAddress,
-        date_of_birth: formData.dateOfBirth,
-        status: formData.status,
-        kyc_status: formData.kycStatus,
-        is_email_verified: formData.isEmailVerified,
-        default_currency: formData.defaultCurrency,
-        wallet_verification_status: formData.walletVerificationStatus,
-        is_test_account: formData.isTestAccount,
-        withdrawal_limit:
-          formData.withdrawalLimitEnabled && formData.withdrawalLimit
-            ? parseFloat(formData.withdrawalLimit)
-            : undefined,
-        withdrawal_all_time_limit:
-          formData.withdrawalLimitEnabled && formData.withdrawalAllTimeLimit
-            ? parseFloat(formData.withdrawalAllTimeLimit)
-            : undefined,
-        withdrawal_limit_enabled: formData.withdrawalLimitEnabled,
-      });
+      // Map to UpdatePlayerRequest format
+      const updateData: UpdatePlayerRequest = {
+        email: formData.email || null,
+        username: formData.username || null,
+        phone: formData.phoneNumber || null,
+        first_name: formData.firstName || null,
+        last_name: formData.lastName || null,
+        default_currency: formData.defaultCurrency || null,
+        country: formData.country || null,
+        state: formData.state || null,
+        street_address: formData.streetAddress || null,
+        postal_code: formData.postalCode || null,
+        date_of_birth: formData.dateOfBirth || null,
+        test_account: formData.isTestAccount,
+        enable_withdrawal_limit: formData.withdrawalLimitEnabled,
+      };
 
-      if (response.success) {
-        // Use response data if available, otherwise use formData
-        const responseData = (response as any).data?.data || (response as any).data;
+      const playerId = parseInt(player.id, 10);
+      if (isNaN(playerId)) {
+        toast.error("Invalid player ID");
+        setLoading(false);
+        return;
+      }
+
+      const response = await playerManagementService.updatePlayer(playerId, updateData);
+
+      if (response.success && response.data) {
+        // Response from playerManagementService.updatePlayer returns UpdatePlayerResponse with player object
+        const updatedPlayerData = response.data.player;
         const updatedPlayer: Player = {
           ...player,
-          // Map response data back to camelCase if response uses snake_case
-          username: responseData?.username || formData.username,
-          email: responseData?.email || formData.email,
-          firstName:
-            responseData?.first_name ||
-            responseData?.firstName ||
-            formData.firstName,
-          lastName:
-            responseData?.last_name ||
-            responseData?.lastName ||
-            formData.lastName,
-          phoneNumber:
-            responseData?.phone_number ||
-            responseData?.phoneNumber ||
-            formData.phoneNumber,
-          country: responseData?.country || formData.country,
-          state: responseData?.state || formData.state,
-          city: responseData?.city || formData.city,
-          postalCode:
-            responseData?.postal_code ||
-            responseData?.postalCode ||
-            formData.postalCode,
-          streetAddress:
-            responseData?.street_address ||
-            responseData?.streetAddress ||
-            formData.streetAddress,
-          dateOfBirth:
-            responseData?.date_of_birth ||
-            responseData?.dateOfBirth ||
-            formData.dateOfBirth,
-          status: responseData?.status || formData.status,
-          kycStatus:
-            responseData?.kyc_status ||
-            responseData?.kycStatus ||
-            formData.kycStatus,
-          isEmailVerified:
-            responseData?.is_email_verified !== undefined
-              ? responseData.is_email_verified
-              : responseData?.isEmailVerified !== undefined
-                ? responseData.isEmailVerified
-                : formData.isEmailVerified,
-          defaultCurrency:
-            responseData?.default_currency ||
-            responseData?.defaultCurrency ||
-            formData.defaultCurrency,
-          walletVerificationStatus:
-            responseData?.wallet_verification_status ||
-            responseData?.walletVerificationStatus ||
-            formData.walletVerificationStatus,
-          ...(responseData?.is_test_account !== undefined && {
-            isTestAccount: responseData.is_test_account,
-          }),
-          ...(responseData?.isTestAccount !== undefined && {
-            isTestAccount: responseData.isTestAccount,
-          }),
-          ...(responseData?.withdrawal_limit !== undefined && {
-            withdrawalLimit: String(responseData.withdrawal_limit),
-          }),
-          ...(responseData?.withdrawalLimit !== undefined && {
-            withdrawalLimit: String(responseData.withdrawalLimit),
-          }),
-          ...(responseData?.withdrawal_all_time_limit !== undefined && {
-            withdrawalAllTimeLimit: String(
-              responseData.withdrawal_all_time_limit,
-            ),
-          }),
-          ...(responseData?.withdrawalAllTimeLimit !== undefined && {
-            withdrawalAllTimeLimit: String(responseData.withdrawalAllTimeLimit),
-          }),
-          ...(responseData?.withdrawal_limit_enabled !== undefined && {
-            withdrawalLimitEnabled: responseData.withdrawal_limit_enabled,
-          }),
-          ...(responseData?.withdrawalLimitEnabled !== undefined && {
-            withdrawalLimitEnabled: responseData.withdrawalLimitEnabled,
-          }),
+          // Map response data back to camelCase
+          username: updatedPlayerData.username || formData.username,
+          email: updatedPlayerData.email || formData.email,
+          firstName: updatedPlayerData.first_name || formData.firstName,
+          lastName: updatedPlayerData.last_name || formData.lastName,
+          phoneNumber: updatedPlayerData.phone || formData.phoneNumber,
+          country: updatedPlayerData.country || formData.country,
+          state: updatedPlayerData.state || formData.state,
+          city: formData.city, // Not in backend Player type
+          postalCode: updatedPlayerData.postal_code || formData.postalCode,
+          streetAddress: updatedPlayerData.street_address || formData.streetAddress,
+          dateOfBirth: updatedPlayerData.date_of_birth || formData.dateOfBirth,
+          status: formData.status, // Not in backend Player type
+          kycStatus: formData.kycStatus, // Not in backend Player type
+          isEmailVerified: formData.isEmailVerified, // Not in backend Player type
+          defaultCurrency: updatedPlayerData.default_currency || formData.defaultCurrency,
+          walletVerificationStatus: formData.walletVerificationStatus, // Not in backend Player type
+          isTestAccount: updatedPlayerData.test_account !== undefined 
+            ? updatedPlayerData.test_account 
+            : formData.isTestAccount,
+          withdrawalLimitEnabled: updatedPlayerData.enable_withdrawal_limit !== undefined
+            ? updatedPlayerData.enable_withdrawal_limit
+            : formData.withdrawalLimitEnabled,
         };
 
         toast.success("Player updated successfully");

@@ -22,7 +22,7 @@ export function getMockBrands(): Brand[] {
   const codes = ["RC", "LS", "GS", "AG", "DB", "CP", "GR", "PC", "SV", "EG"];
   const types = ["API", "Aggregator", "Direct"];
   return names.map((name, i) => ({
-    id: `mock-brand-${i + 1}`,
+    id: i + 1,
     name,
     code: codes[i],
     domain: `${codes[i].toLowerCase()}.gamecrafter.io`,

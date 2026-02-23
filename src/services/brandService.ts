@@ -2,7 +2,7 @@ import { adminSvc } from "./apiService";
 import { ApiResponse } from "./apiService";
 
 export interface Brand {
-  id: string;
+  id: number;
   name: string;
   code: string;
   domain?: string;
@@ -79,7 +79,7 @@ class BrandService {
     }
   }
 
-  async getBrandById(id: string): Promise<ApiResponse<Brand>> {
+  async getBrandById(id: number): Promise<ApiResponse<Brand>> {
     try {
       const response = await adminSvc.get<Brand>(`${this.BASE_PATH}/${id}`);
       return response;
@@ -100,7 +100,7 @@ class BrandService {
   }
 
   async updateBrand(
-    id: string,
+    id: number,
     data: UpdateBrandRequest,
   ): Promise<ApiResponse<Brand>> {
     try {
@@ -115,7 +115,7 @@ class BrandService {
     }
   }
 
-  async deleteBrand(id: string): Promise<ApiResponse<void>> {
+  async deleteBrand(id: number): Promise<ApiResponse<void>> {
     try {
       const response = await adminSvc.delete<void>(`${this.BASE_PATH}/${id}`);
       return response;

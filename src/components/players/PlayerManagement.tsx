@@ -32,6 +32,7 @@ import { kycService } from "../../services/kycService";
 import { clientSvc } from "../../services/apiService";
 import { brandService, Brand } from "../../services/brandService";
 import { cashbackService } from "../../services/cashbackService";
+import { playerManagementService } from "../../services/playerManagementService";
 import toast from "react-hot-toast";
 
 interface Player {
@@ -117,7 +118,7 @@ export const PlayerManagement: React.FC = () => {
     null,
   );
   const [showTestAccountFilter, setShowTestAccountFilter] = useState(false);
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [brandFilter, setBrandFilter] = useState<number[]>([]);
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loadingBrands, setLoadingBrands] = useState(false);
@@ -377,162 +378,85 @@ export const PlayerManagement: React.FC = () => {
   const fetchPlayers = async (page: number = 1, search: string = "") => {
     try {
       setLoading(true);
-      const filterPayload: any = {
-        // Broad search fields; backend should do substring matching
-        searchterm: search || undefined,
-        search: search || undefined,
-        username: search || undefined,
-        email: search || undefined,
-        phone_number: search || undefined,
-        user_id: search || undefined,
-        is_test_account: testAccountFilter,
-        brand_id: brandFilter.length > 0 ? brandFilter : undefined,
-      };
-
-      const requestPayload: any = {
+      
+      console.log("🟢 PlayerManagement - fetchPlayers called with:", { page, search });
+      
+      // Use playerManagementService with correct endpoint
+      const filters: any = {
         page,
-        per_page: playersPerPage,
-        filter: filterPayload,
+        "per-page": playersPerPage,
       };
 
-      // Add sorting parameters if sort is active
-      if (sortBy) {
-        requestPayload.sort_by = sortBy;
-        requestPayload.sort_order = sortOrder;
+      if (search) {
+        filters.search = search;
+      }
+      if (testAccountFilter !== null) {
+        filters.test_account = testAccountFilter;
+      }
+      if (brandFilter.length > 0) {
+        // Use first brand if multiple selected, or join them if backend supports it
+        filters.brand_id = brandFilter[0];
       }
 
-      const response = await adminSvc.post("/users", requestPayload);
+      console.log("🟢 About to call playerManagementService.getPlayers with filters:", filters);
+      
+      const response = await playerManagementService.getPlayers(filters);
 
-      if (response.success && response.data && (response.data as any).users) {
-        // Map backend User format to frontend Player format
-        const mappedPlayers = (response.data as any).users.map((user: any) => {
-          console.log("User data structure:", user);
-          console.log("User VIP level from backend:", user.vip_level);
-          console.log("User accounts:", user.accounts);
+      console.log("🟢 PlayerManagement - getPlayers response:", response);
 
+      if (response.success && response.data && response.data.players) {
+        // Map backend Player format to frontend Player format
+        const mappedPlayers = response.data.players.map((player: any) => {
+          // Map from backend Player format to frontend Player format
+          // Backend returns Player with snake_case, frontend expects camelCase
           return {
-            id: user.id,
-            username: user.username || "",
-            email: user.email || "",
-            phoneNumber: user.phone_number || "",
-            firstName: user.first_name || "",
-            lastName: user.last_name || "",
-            dateOfBirth: user.date_of_birth || "",
-            streetAddress: user.street_address || "",
-            country: user.country || "",
-            state: user.state || "",
-            city: user.city || "",
-            postalCode: user.postal_code || "",
-            kycStatus: user.kyc_status || "PENDING",
-            isEmailVerified: user.is_email_verified || false,
-            referalCode: user.referal_code || "",
-            referalType: user.referal_type || "",
-            referedByCode: user.refered_by_code || "",
-            userType: user.user_type || "PLAYER",
-            primaryWalletAddress: user.primary_wallet_address || "",
-            walletVerificationStatus: user.wallet_verification_status || "none",
-            status: user.status || "ACTIVE",
-            isAdmin: user.is_admin || false,
-            defaultCurrency: user.default_currency || "USD",
-            profilePicture: user.profile_picture || "",
-            source: user.source || "",
-            createdBy: user.created_by || "",
-            createdAt: user.created_at || new Date().toISOString(),
+            id: String(player.id),
+            username: player.username || "",
+            email: player.email || "",
+            phoneNumber: player.phone || "",
+            firstName: player.first_name || "",
+            lastName: player.last_name || "",
+            dateOfBirth: player.date_of_birth || "",
+            streetAddress: player.street_address || "",
+            country: player.country || "",
+            state: player.state || "",
+            city: "", // Not in backend Player type
+            postalCode: player.postal_code || "",
+            kycStatus: "PENDING", // Not in backend Player type
+            isEmailVerified: false, // Not in backend Player type
+            referalCode: "", // Not in backend Player type
+            referalType: "", // Not in backend Player type
+            referedByCode: "", // Not in backend Player type
+            userType: "PLAYER", // Not in backend Player type
+            primaryWalletAddress: "", // Not in backend Player type
+            walletVerificationStatus: "none", // Not in backend Player type
+            status: "ACTIVE", // Not in backend Player type
+            isAdmin: false, // Not in backend Player type
+            defaultCurrency: player.default_currency || "USD",
+            profilePicture: "", // Not in backend Player type
+            source: "", // Not in backend Player type
+            createdBy: "", // Not in backend Player type
+            createdAt: player.created_at || new Date().toISOString(),
             // Computed fields
-            registrationDate: user.created_at || new Date().toISOString(),
-            lastLogin: user.last_login || new Date().toISOString(),
-            verified: user.is_email_verified || false,
-            totalDeposits: user.total_deposits || 0,
-            totalWithdrawals: user.total_withdrawals || 0,
-            currentBalance: (() => {
-              // First try to get balance from accounts
-              if (user.accounts && user.accounts.length > 0) {
-                const account = user.accounts[0];
-                // Use amount_units as the primary balance field
-                const accountBalance = parseFloat(account.amount_units || "0");
-                if (accountBalance > 0) {
-                  return accountBalance;
-                }
-              }
-
-              // If accounts is empty or balance is 0, calculate from approved transactions
-              if (user.transactions && Array.isArray(user.transactions)) {
-                console.log(
-                  "User transactions for balance calculation:",
-                  user.transactions,
-                );
-                let balance = 0;
-                user.transactions.forEach((transaction: any) => {
-                  console.log(
-                    "Processing transaction for balance:",
-                    transaction,
-                  );
-                  // Only count approved/confirmed transactions
-                  if (
-                    transaction.status === "APPROVED" ||
-                    transaction.status === "CONFIRMED" ||
-                    transaction.status === "COMPLETED"
-                  ) {
-                    if (
-                      transaction.type === "DEPOSIT" ||
-                      transaction.type === "WIN"
-                    ) {
-                      balance += parseFloat(
-                        transaction.amount || transaction.usd || "0",
-                      );
-                    } else if (
-                      transaction.type === "WITHDRAWAL" ||
-                      transaction.type === "BET"
-                    ) {
-                      balance -= parseFloat(
-                        transaction.amount || transaction.usd || "0",
-                      );
-                    }
-                  }
-                });
-                console.log("Calculated balance from transactions:", balance);
-                return balance;
-              }
-
-              // Fallback to direct balance fields
-              if (user.balance !== undefined) {
-                return parseFloat(user.balance || "0");
-              }
-              if (user.current_balance !== undefined) {
-                return parseFloat(user.current_balance || "0");
-              }
-
-              return 0;
-            })(),
-            totalWagered: user.total_wagered || 0,
-            netProfitLoss:
-              (user.total_wagered || 0) - (user.total_winnings || 0),
-            sessionsCount: user.sessions_count || 0,
-            vipLevel: user.vip_level || "Bronze",
-            riskScore: user.risk_score || "Low",
+            registrationDate: player.created_at || new Date().toISOString(),
+            lastLogin: new Date().toISOString(), // Not in backend Player type
+            verified: false, // Not in backend Player type
+            totalDeposits: 0, // Not in backend Player type
+            totalWithdrawals: 0, // Not in backend Player type
+            currentBalance: 0, // Not in backend Player type
+            totalWagered: 0, // Not in backend Player type
+            netProfitLoss: 0, // Not in backend Player type
+            sessionsCount: 0, // Not in backend Player type
+            vipLevel: "Bronze", // Not in backend Player type
+            riskScore: "Low", // Not in backend Player type
             transactions: [],
             // Test account and balance info
-            isTestAccount: user.is_test_account || false,
-            accounts: user.accounts || [],
-            // Withdrawal limits - convert strings to numbers if needed
-            withdrawalLimit:
-              user.withdrawal_limit !== undefined &&
-              user.withdrawal_limit !== null
-                ? typeof user.withdrawal_limit === "string"
-                  ? parseFloat(user.withdrawal_limit)
-                  : user.withdrawal_limit
-                : undefined,
-            withdrawalAllTimeLimit:
-              user.withdrawal_all_time_limit !== undefined &&
-              user.withdrawal_all_time_limit !== null
-                ? typeof user.withdrawal_all_time_limit === "string"
-                  ? parseFloat(user.withdrawal_all_time_limit)
-                  : user.withdrawal_all_time_limit
-                : undefined,
-            withdrawalLimitEnabled:
-              user.withdrawal_limit_enabled !== undefined
-                ? Boolean(user.withdrawal_limit_enabled)
-                : false,
+            isTestAccount: player.test_account || false,
+            accounts: [], // Not in backend Player type
+            // Withdrawal limits
+            withdrawalLimit: undefined,
+            withdrawalAllTimeLimit: undefined,
+            withdrawalLimitEnabled: player.enable_withdrawal_limit || false,
           };
         });
 
@@ -565,8 +489,8 @@ export const PlayerManagement: React.FC = () => {
             e,
           );
         }
-        setTotalPages((response.data as any).total_pages || 1);
-        setTotalPlayers((response.data as any).total_count || 0);
+        setTotalPages(response.data.total_pages || 1);
+        setTotalPlayers(response.data.total_count || 0);
       }
     } catch (error: any) {
       console.error("Failed to fetch players:", error);
@@ -678,7 +602,7 @@ export const PlayerManagement: React.FC = () => {
     setTestAccountFilter(value);
   };
 
-  const toggleBrandFilter = (brandId: string) => {
+  const toggleBrandFilter = (brandId: number) => {
     setBrandFilter((prev) =>
       prev.includes(brandId)
         ? prev.filter((id) => id !== brandId)
@@ -698,6 +622,12 @@ export const PlayerManagement: React.FC = () => {
     reason: string,
     note: string,
   ) => {
+    // NOTE: Suspend operation is not available through player-management endpoints
+    // This functionality requires a separate endpoint that is not part of the player-management API
+    toast.error("Suspend functionality is not available through player-management API");
+    return;
+    
+    /* DISABLED - Using /users endpoint instead of player-management
     try {
       const response = await adminSvc.post("/users/block", {
         user_id: playerId,
@@ -764,9 +694,16 @@ export const PlayerManagement: React.FC = () => {
         toast.error(errorMessage);
       }
     }
+    */
   };
 
   const handleUnsuspendPlayer = async (playerId: string) => {
+    // NOTE: Unsuspend operation is not available through player-management endpoints
+    // This functionality requires a separate endpoint that is not part of the player-management API
+    toast.error("Unsuspend functionality is not available through player-management API");
+    return;
+    
+    /* DISABLED - Using /users endpoint instead of player-management
     try {
       // Find the player to get their current data
       const player = players.find((p) => p.id === playerId);
@@ -852,6 +789,7 @@ export const PlayerManagement: React.FC = () => {
         toast.error(errorMessage);
       }
     }
+    */
   };
 
   const handleExportPlayers = async () => {
@@ -1005,6 +943,13 @@ export const PlayerManagement: React.FC = () => {
   const handleResetPassword = async () => {
     if (!resettingPasswordPlayer) return;
 
+    // NOTE: Password reset operation is not available through player-management endpoints
+    // This functionality requires a separate endpoint that is not part of the player-management API
+    toast.error("Password reset functionality is not available through player-management API");
+    setResettingPasswordPlayer(null);
+    return;
+    
+    /* DISABLED - Using /users endpoint instead of player-management
     try {
       setIsResettingPassword(true);
       const response = await adminSvc.post("/users/password/auto-reset", {
@@ -1024,6 +969,39 @@ export const PlayerManagement: React.FC = () => {
       toast.error(error.message || "Failed to reset password");
     } finally {
       setIsResettingPassword(false);
+    }
+    */
+  };
+
+  const handleDeletePlayer = async (playerId: string) => {
+    try {
+      const response = await playerManagementService.deletePlayer(Number(playerId));
+      if (response.success) {
+        toast.success("Player deleted successfully");
+        // Refresh the players list
+        await fetchPlayers(currentPage, searchTerm);
+        try {
+          const { adminActivityLogsService } =
+            await import("../../services/adminActivityLogsService");
+          await adminActivityLogsService.createActivityLog({
+            action: "PLAYER_DELETE",
+            category: "PlayerManagement",
+            severity: "warning",
+            resource_type: "user",
+            resource_id: playerId,
+            description: "Player deleted from Player Management",
+          });
+        } catch {}
+      } else {
+        toast.error(response.message || "Failed to delete player");
+      }
+    } catch (error: any) {
+      console.error("Failed to delete player:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete player";
+      toast.error(errorMessage);
     }
   };
 
@@ -1854,6 +1832,21 @@ export const PlayerManagement: React.FC = () => {
                             >
                               <Key className="h-4 w-4" />
                               <span>Reset Password</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`Are you sure you want to delete player ${player.username}? This action cannot be undone.`)) {
+                                  handleDeletePlayer(player.id);
+                                }
+                                setOpenDropdownId(null);
+                                setDropdownPosition(null);
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center space-x-2"
+                            >
+                              <UserX className="h-4 w-4" />
+                              <span>Delete Player</span>
                             </button>
                           </div>,
                           document.body,

@@ -6,3 +6,4 @@ export * from "./reportsService";
 export * from "./twoFactorService";
 export * from "./brandService";
 export * from "./rakebackOverrideService";
+export * from "./playerManagementService";

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useServices } from '../../contexts/ServicesContext';
 import { cashbackService } from '../../services/cashbackService';
+import { playerManagementService } from '../../services/playerManagementService';
 import { KYCManagement } from '../kyc/KYCManagement';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -470,10 +471,57 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     const fetchPlayerDetails = async () => {
       try {
         setPlayerLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use player-management API instead of /players/{id}/details
+        const response = await playerManagementService.getPlayerById(Number(player.id));
         console.log('Player details response:', response);
-        const playerData = response.data?.data || response.data;
-        setPlayerDetails(playerData);
+        // The response.data is GetPlayerResponse which has a 'player' property
+        // We need to wrap it in the PlayerDetailsData structure that the component expects
+        const playerData = response.data?.player;
+        if (playerData) {
+          // Map the API player data to the PlayerDetails Player interface format
+          const mappedPlayer = {
+            id: String(playerData.id),
+            username: playerData.username || '',
+            email: playerData.email || '',
+            phone_number: playerData.phone || '',
+            first_name: playerData.first_name || '',
+            last_name: playerData.last_name || '',
+            date_of_birth: playerData.date_of_birth || '',
+            street_address: playerData.street_address || '',
+            country: playerData.country || '',
+            state: playerData.state || '',
+            city: '', // Not in API response
+            postal_code: playerData.postal_code || '',
+            kyc_status: 'PENDING', // Not in API response, default
+            is_email_verified: false, // Not in API response, default
+            referral_code: '', // Not in API response
+            user_type: 'PLAYER', // Not in API response, default
+            type: 'PLAYER', // Not in API response, default
+            status: 'ACTIVE', // Not in API response, default
+            default_currency: playerData.default_currency || 'USD',
+            profile_picture: '', // Not in API response
+            created_at: playerData.created_at || '',
+            source: '', // Not in API response
+          };
+          setPlayerDetails({
+            player: mappedPlayer,
+            suspension_history: [],
+            balance_logs: [],
+            balances: [],
+            game_activity: [],
+            statistics: {
+              total_wagered: "0",
+              net_pl: "0",
+              sessions: 0,
+              total_bets: 0,
+              total_wins: 0,
+              total_losses: 0,
+              win_rate: "0",
+              avg_bet_size: "0",
+              last_activity: "",
+            },
+          });
+        }
         setPlayerLoading(false);
       } catch (error) {
         console.error('Failed to fetch player details:', error);
@@ -483,7 +531,7 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     };
 
     fetchPlayerDetails();
-  }, [player.id, adminSvc]);
+  }, [player.id]);
 
   // Fetch statistics separately
   useEffect(() => {

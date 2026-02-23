@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle, MoreVertical, Eye } from "lucide-react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import {
   Brand,
   CreateBrandRequest,
   UpdateBrandRequest,
+  brandService,
 } from "../../services/brandService";
-import { getMockBrands } from "../../mocks/brands";
 
 const BrandManagement: React.FC = () => {
-  const [allBrands, setAllBrands] = useState<Brand[]>(() => getMockBrands());
+  const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -23,6 +24,12 @@ const BrandManagement: React.FC = () => {
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [viewingBrand, setViewingBrand] = useState<Brand | null>(null);
   const [brandToDelete, setBrandToDelete] = useState<Brand | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+    above?: boolean;
+  } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(
     undefined,
@@ -46,38 +53,65 @@ const BrandManagement: React.FC = () => {
     is_active: true,
   });
 
-  const loadBrands = useCallback(() => {
+  const loadBrands = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const filtered = allBrands.filter((b) => {
-      const matchSearch =
-        !searchTerm ||
-        b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.code.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchActive =
-        isActiveFilter === undefined || b.is_active === isActiveFilter;
-      return matchSearch && matchActive;
-    });
-    const total = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / pagination.perPage));
-    const page = Math.min(pagination.page, totalPages);
-    const start = (page - 1) * pagination.perPage;
-    const pageBrands = filtered.slice(start, start + pagination.perPage);
-    setBrands(pageBrands);
+    try {
+      const response = await brandService.getBrands({
+        page: pagination.page,
+        "per-page": pagination.perPage,
+        search: searchTerm || undefined,
+        is_active: isActiveFilter,
+      });
+
+      if (response.success && response.data) {
+        const brandsList = response.data.brands || [];
+        setAllBrands(brandsList);
+        setBrands(brandsList);
         setPagination((prev) => ({
           ...prev,
-      total,
-      totalPages,
-      currentPage: page,
-    }));
+          total: response.data?.total_count || 0,
+          totalPages: response.data?.total_pages || 1,
+          currentPage: response.data?.current_page || 1,
+        }));
+      } else {
+        setError(response.message || "Failed to load brands");
+        setBrands([]);
+      }
+    } catch (err: any) {
+      console.error("Error loading brands:", err);
+      setError(err.message || "Failed to load brands");
+      setBrands([]);
+    } finally {
       setLoading(false);
-  }, [allBrands, pagination.page, pagination.perPage, searchTerm, isActiveFilter]);
+    }
+  }, [pagination.page, pagination.perPage, searchTerm, isActiveFilter]);
 
   useEffect(() => {
     loadBrands();
   }, [loadBrands]);
 
-  const handleCreateBrand = () => {
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (openDropdownId !== null) {
+        const isDropdownButton = target.closest(".dropdown-container");
+        const isPortalDropdown = target.closest(".action-dropdown-portal");
+        if (!isDropdownButton && !isPortalDropdown) {
+          setOpenDropdownId(null);
+          setDropdownPosition(null);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openDropdownId]);
+
+  const handleCreateBrand = async () => {
     if (creating) return;
 
     if (!newBrand.name || !newBrand.code) {
@@ -86,52 +120,66 @@ const BrandManagement: React.FC = () => {
     }
 
     setCreating(true);
-    const now = new Date().toISOString();
-    const brand: Brand = {
-      id: `mock-brand-${Date.now()}`,
-      name: newBrand.name,
-      code: newBrand.code,
-      domain: newBrand.domain,
-      description: newBrand.description,
-      api_url: newBrand.api_url,
-      webhook_url: newBrand.webhook_url,
-      integration_type: newBrand.integration_type ?? "API",
-      is_active: newBrand.is_active ?? true,
-      created_at: now,
-      updated_at: now,
-    };
-    setAllBrands((prev) => [...prev, brand]);
+    try {
+      const response = await brandService.createBrand(newBrand);
+      if (response.success && response.data) {
         toast.success("Brand created successfully");
         setShowCreateModal(false);
         setNewBrand({
           name: "",
           code: "",
           domain: "",
-      description: "",
-      api_url: "",
-      webhook_url: "",
-      integration_type: "API",
+          description: "",
+          api_url: "",
+          webhook_url: "",
+          integration_type: "API",
           is_active: true,
         });
+        // Reload brands list
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to create brand");
+      }
+    } catch (err: any) {
+      console.error("Error creating brand:", err);
+      toast.error(err.message || "Failed to create brand");
+    } finally {
       setCreating(false);
+    }
   };
 
-  const handleUpdateBrand = () => {
+  const handleUpdateBrand = async () => {
     if (!editingBrand || updating) return;
 
     setUpdating(true);
-    const updated: Brand = {
-      ...editingBrand,
-      updated_at: new Date().toISOString(),
-    };
-    setAllBrands((prev) =>
-      prev.map((b) => (b.id === editingBrand.id ? updated : b)),
-    );
+    try {
+      const updateData: UpdateBrandRequest = {
+        name: editingBrand.name,
+        code: editingBrand.code,
+        domain: editingBrand.domain,
+        description: editingBrand.description,
+        api_url: editingBrand.api_url,
+        webhook_url: editingBrand.webhook_url,
+        integration_type: editingBrand.integration_type,
+        is_active: editingBrand.is_active,
+      };
+
+      const response = await brandService.updateBrand(editingBrand.id, updateData);
+      if (response.success) {
         toast.success("Brand updated successfully");
         setShowEditModal(false);
         setEditingBrand(null);
+        // Reload brands list
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to update brand");
+      }
+    } catch (err: any) {
+      console.error("Error updating brand:", err);
+      toast.error(err.message || "Failed to update brand");
+    } finally {
       setUpdating(false);
-    setTimeout(loadBrands, 0);
+    }
   };
 
   const handleDeleteBrand = (brand: Brand) => {
@@ -139,15 +187,27 @@ const BrandManagement: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const confirmDeleteBrand = () => {
+  const confirmDeleteBrand = async () => {
     if (!brandToDelete || deleting) return;
 
     setDeleting(true);
-    setAllBrands((prev) => prev.filter((b) => b.id !== brandToDelete.id));
+    try {
+      const response = await brandService.deleteBrand(brandToDelete.id);
+      if (response.success) {
         toast.success("Brand deleted successfully");
         setShowDeleteModal(false);
         setBrandToDelete(null);
+        // Reload brands list
+        await loadBrands();
+      } else {
+        toast.error(response.message || "Failed to delete brand");
+      }
+    } catch (err: any) {
+      console.error("Error deleting brand:", err);
+      toast.error(err.message || "Failed to delete brand");
+    } finally {
       setDeleting(false);
+    }
   };
 
   const handleEditClick = (brand: Brand) => {
@@ -335,31 +395,103 @@ const BrandManagement: React.FC = () => {
                         {new Date(brand.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-1">
+                        <div className="relative dropdown-container">
                           <button
-                            onClick={() => {
-                              setViewingBrand(brand);
-                              setShowViewModal(true);
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (openDropdownId === brand.id) {
+                                setOpenDropdownId(null);
+                                setDropdownPosition(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const topPosition = rect.bottom + 4;
+                                const leftPosition = rect.left + rect.width / 2;
+                                const viewportHeight = window.innerHeight;
+                                const spaceBelow = viewportHeight - rect.bottom;
+                                let finalTop = topPosition;
+                                if (spaceBelow < 100) {
+                                  finalTop = rect.top - 4;
+                                }
+                                setOpenDropdownId(brand.id);
+                                setDropdownPosition({
+                                  top: finalTop,
+                                  left: leftPosition,
+                                  above: spaceBelow < 100,
+                                });
+                              }
                             }}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="View details"
+                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg relative z-10"
+                            title="Actions"
                           >
-                            <FileText className="w-4 h-4" />
+                            <MoreVertical className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleEditClick(brand)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBrand(brand)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+
+                          {openDropdownId === brand.id &&
+                            dropdownPosition &&
+                            typeof document !== "undefined" &&
+                            createPortal(
+                              <div
+                                className="fixed rounded-lg z-[99999] min-w-[160px] action-dropdown-portal"
+                                style={{
+                                  top: `${dropdownPosition.top}px`,
+                                  left: `${dropdownPosition.left}px`,
+                                  transform: "translateX(-50%)",
+                                  backgroundColor: "#111827",
+                                  border: "2px solid #4B5563",
+                                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                                  backdropFilter: "none",
+                                  maxHeight: `${Math.min(400, window.innerHeight - dropdownPosition.top - 8)}px`,
+                                  overflowY: "auto",
+                                  scrollbarWidth: "thin",
+                                  scrollbarColor: "#6B7280 #374151",
+                                  position: "fixed",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingBrand(brand);
+                                    setShowViewModal(true);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span>View Details</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditClick(brand);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBrand(brand);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>,
+                              document.body,
+                            )}
                         </div>
                       </td>
                     </tr>

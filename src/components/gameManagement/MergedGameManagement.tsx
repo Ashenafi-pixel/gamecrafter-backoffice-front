@@ -42,41 +42,13 @@ import GameImportManagement from "./GameImportManagement";
 
 type TabType = "games" | "house-edges" | "game-import";
 
-// Demo helpers were previously used to generate static mock data.
-// Games and house edges are now loaded from the backend services.
-function getMockHouseEdges(mockGames: Game[]): HouseEdge[] {
-  const now = new Date().toISOString();
-  const types = ["slot", "table", "live"] as const;
-  const variants = ["classic", "v1", "real"] as const;
-  const games = mockGames.slice(0, 14);
-  return games.flatMap((g, i) => {
-    const gameType = types[i % 3];
-    const gameVariant = variants[i % 3];
-    const houseEdge = (2 + (i % 3) * 0.5).toFixed(2);
-    const id = `mock-he-${g.id}-${gameType}-${gameVariant}`;
-    return {
-      id,
-      game_id: g.game_id,
-      game_name: g.name,
-      game_type: gameType,
-      game_variant: gameVariant,
-      house_edge: (parseFloat(houseEdge) / 100).toFixed(4),
-      min_bet: "0.10",
-      max_bet: i % 2 === 0 ? "500" : "1000",
-      is_active: i % 5 !== 2,
-      effective_from: now,
-      effective_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      created_at: now,
-      updated_at: now,
-    };
-  });
-}
+// Mock functions removed - using API only
 
 const MergedGameManagement: React.FC = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<TabType>("games");
 
-  // Games state (backed by API, with a cached list for selectors/modals)
+  // Games state - only from API, no mock data
   const [allGames, setAllGames] = useState<Game[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
@@ -89,7 +61,6 @@ const MergedGameManagement: React.FC = () => {
   const [showViewGameModal, setShowViewGameModal] = useState(false);
   const [showDeleteGameModal, setShowDeleteGameModal] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
-  const [editingProviderId, setEditingProviderId] = useState<string>("");
   const [viewingGame, setViewingGame] = useState<Game | null>(null);
   const [gameToDelete, setGameToDelete] = useState<Game | null>(null);
   const [gamesFilters, setGamesFilters] = useState<GameFilters>({
@@ -104,7 +75,7 @@ const MergedGameManagement: React.FC = () => {
     current_page: 1,
   });
 
-  // House Edges state (now starts empty; can be wired to backend service)
+  // House Edges state - only from API, no mock data
   const [allHouseEdges, setAllHouseEdges] = useState<HouseEdge[]>([]);
   const [houseEdges, setHouseEdges] = useState<HouseEdge[]>([]);
   const [houseEdgesLoading, setHouseEdgesLoading] = useState(false);
@@ -159,11 +130,40 @@ const MergedGameManagement: React.FC = () => {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
 
-  // Provider selection state
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [loadingProviders, setLoadingProviders] = useState(false);
-  const [providerSearch, setProviderSearch] = useState("");
-  const [editProviderSearch, setEditProviderSearch] = useState("");
+  // Provider selection state (for provider_id dropdown)
+  const [gameProviders, setGameProviders] = useState<Provider[]>([]);
+  const [loadingGameProviders, setLoadingGameProviders] = useState(false);
+
+  // Provider dropdown state for searchable dropdowns
+  const [providerDropdownOpen, setProviderDropdownOpen] = useState<{
+    filter: boolean;
+    create: boolean;
+    edit: boolean;
+  }>({
+    filter: false,
+    create: false,
+    edit: false,
+  });
+  const [providerSearchTerm, setProviderSearchTerm] = useState<{
+    filter: string;
+    create: string;
+    edit: string;
+  }>({
+    filter: "",
+    create: "",
+    edit: "",
+  });
+
+  // Get unique providers from games
+  const getUniqueProviders = useCallback(() => {
+    const providers = new Set<string>();
+    allGames.forEach((game) => {
+      if (game.provider) {
+        providers.add(game.provider);
+      }
+    });
+    return Array.from(providers).sort();
+  }, [allGames]);
 
   // Helper functions
   const getStatusColor = (status: string) => {
@@ -201,12 +201,14 @@ const MergedGameManagement: React.FC = () => {
   const [newGame, setNewGame] = useState<CreateGameRequest>({
     name: "",
     status: "ACTIVE",
-    photo: "",
+    photo: null,
+    price: null,
     enabled: true,
-    game_id: "",
-    internal_name: "",
-    integration_partner: "groove",
-    provider_id: "",
+    game_id: null,
+    internal_name: null,
+    integration_partner: null,
+    provider: null,
+    provider_id: "", // Required - must be selected
   });
 
   // House Edges form state
@@ -251,33 +253,41 @@ const MergedGameManagement: React.FC = () => {
   const [applyAllLoading, setApplyAllLoading] = useState(false);
   const [removeAllLoading, setRemoveAllLoading] = useState(false);
 
-  // Load games from backend (filters & pagination handled by API)
+  // Load games from API
   const loadGames = useCallback(async () => {
     setGamesLoading(true);
     setError(null);
     try {
       const response = await gameManagementService.getGames(gamesFilters);
       if (response.success && response.data) {
-        const payload = response.data;
-        const list = payload.games || [];
-        setGames(list);
-        setAllGames(list);
+        const gamesList = response.data.games || [];
+        setAllGames(gamesList);
+        setGames(gamesList);
         setGamesPagination({
-          total: payload.total_count ?? payload.total ?? list.length,
-          total_pages: payload.total_pages ?? 1,
-          current_page: payload.page ?? gamesFilters.page ?? 1,
+          total: response.data.total_count || response.data.total || 0,
+          total_pages: response.data.total_pages || 0,
+          current_page: response.data.page || gamesFilters.page || 1,
         });
       } else {
         setError(response.message || "Failed to load games");
-        toast.error(response.message || "Failed to load games");
         setGames([]);
+        setAllGames([]);
+        setGamesPagination({
+          total: 0,
+          total_pages: 0,
+          current_page: 1,
+        });
       }
     } catch (err: any) {
       console.error("Error loading games:", err);
-      const msg = err.message || "Failed to load games";
-      setError(msg);
-      toast.error(msg);
+      setError(err.message || "Failed to load games");
       setGames([]);
+      setAllGames([]);
+      setGamesPagination({
+        total: 0,
+        total_pages: 0,
+        current_page: 1,
+      });
     } finally {
       setGamesLoading(false);
     }
@@ -363,20 +373,54 @@ const MergedGameManagement: React.FC = () => {
 
   const fetchProviders = useCallback(async () => {
     try {
-      setLoadingProviders(true);
+      setLoadingGameProviders(true);
       const response = await providerService.getProviders({
         page: 1,
-        "per-page": 500,
+        "per-page": 100,
         is_active: true, // Only fetch active providers
       });
+      console.log("Provider response:", response);
       if (response.success && response.data) {
-        setProviders(response.data.providers || []);
+        // Handle different response structures
+        let providersList: Provider[] = [];
+        
+        // Check if response.data has providers array (GetProvidersResponse format)
+        if (response.data.providers && Array.isArray(response.data.providers)) {
+          providersList = response.data.providers;
+        } 
+        // Check if response.data is directly an array
+        else if (Array.isArray(response.data)) {
+          providersList = response.data;
+        }
+        // Check if response.data is an object with nested data
+        else if ((response.data as any).data) {
+          const nestedData = (response.data as any).data;
+          if (Array.isArray(nestedData)) {
+            providersList = nestedData;
+          } else if (nestedData.providers && Array.isArray(nestedData.providers)) {
+            providersList = nestedData.providers;
+          }
+        }
+        
+        console.log("Providers list:", providersList);
+        console.log("Number of providers:", providersList.length);
+        setGameProviders(providersList);
+        
+        if (providersList.length === 0) {
+          console.warn("No providers found in response. Response structure:", JSON.stringify(response, null, 2));
+        }
+      } else {
+        console.error("Provider fetch failed:", response.message);
+        console.error("Response:", response);
+        setGameProviders([]);
       }
     } catch (err: any) {
       console.error("Error fetching providers:", err);
+      console.error("Error details:", err.response?.data || err);
       toast.error("Failed to fetch providers");
+      setGameProviders([]);
     } finally {
-      setLoadingProviders(false);
+      setLoadingGameProviders(false);
     }
   }, []);
 
@@ -400,25 +444,32 @@ const MergedGameManagement: React.FC = () => {
     }
   }, [activeTab, loadGames, loadHouseEdges, loadStats]);
 
-  // Games handlers (now using backend API)
+  // Games handlers - using API
   const handleCreateGame = async () => {
     if (gamesCreating) return;
+    if (!newGame.provider_id) {
+      toast.error("Provider is required");
+      return;
+    }
     setGamesCreating(true);
     try {
       const response = await gameManagementService.createGame(newGame);
-      if (response.success) {
+      if (response.success && response.data) {
         toast.success("Game created successfully");
         setShowCreateGameModal(false);
         setNewGame({
           name: "",
           status: "ACTIVE",
-          photo: "",
+          photo: null,
+          price: null,
           enabled: true,
-          game_id: "",
-          internal_name: "",
-          integration_partner: "groove",
-          provider_id: "",
+          game_id: null,
+          internal_name: null,
+          integration_partner: null,
+          provider: null,
+          provider_id: "", // Required - must be selected
         });
+        // Reload games from API
         await loadGames();
       } else {
         toast.error(response.message || "Failed to create game");
@@ -443,17 +494,14 @@ const MergedGameManagement: React.FC = () => {
         game_id: editingGame.game_id,
         internal_name: editingGame.internal_name,
         integration_partner: editingGame.integration_partner,
-        provider_id: editingProviderId,
+        provider: editingGame.provider,
       };
-      const response = await gameManagementService.updateGame(
-        editingGame.id,
-        updateData,
-      );
+      const response = await gameManagementService.updateGame(editingGame.id, updateData);
       if (response.success) {
         toast.success("Game updated successfully");
         setShowEditGameModal(false);
         setEditingGame(null);
-        setEditingProviderId("");
+        // Reload games from API
         await loadGames();
       } else {
         toast.error(response.message || "Failed to update game");
@@ -475,6 +523,7 @@ const MergedGameManagement: React.FC = () => {
         toast.success("Game deleted successfully");
         setShowDeleteGameModal(false);
         setGameToDelete(null);
+        // Reload games from API
         await loadGames();
       } else {
         toast.error(response.message || "Failed to delete game");
@@ -750,11 +799,21 @@ const MergedGameManagement: React.FC = () => {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        activeDropdown &&
-        !(event.target as Element).closest(".dropdown-container")
-      ) {
+      const target = event.target as Element;
+      if (activeDropdown && !target.closest(".dropdown-container")) {
         closeDropdown();
+      }
+      // Close provider dropdowns when clicking outside
+      if (providerDropdownOpen.filter || providerDropdownOpen.create || providerDropdownOpen.edit) {
+        const isProviderInput = target.closest("input[placeholder*='provider' i]");
+        const isProviderDropdown = target.closest(".provider-dropdown");
+        if (!isProviderInput && !isProviderDropdown) {
+          setProviderDropdownOpen({
+            filter: false,
+            create: false,
+            edit: false,
+          });
+        }
       }
     };
 
@@ -762,7 +821,7 @@ const MergedGameManagement: React.FC = () => {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [activeDropdown]);
+  }, [activeDropdown, providerDropdownOpen]);
 
   // KPI counts for Games tab (from current page for active/enabled)
   const gamesActiveCount = games.filter((g) => g.status === "ACTIVE").length;
@@ -937,18 +996,51 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Provider</label>
-                  <input
-                    type="text"
-                    placeholder="Provider name..."
-                    value={gamesFilters.provider || ""}
-                    onChange={(e) =>
-                      handleGamesFilterChange(
-                        "provider",
-                        e.target.value || undefined,
-                      )
-                    }
-                    className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search provider..."
+                      value={providerSearchTerm.filter || gamesFilters.provider || ""}
+                      onChange={(e) => {
+                        setProviderSearchTerm((prev) => ({ ...prev, filter: e.target.value }));
+                        setProviderDropdownOpen((prev) => ({ ...prev, filter: true }));
+                      }}
+                      onFocus={() => {
+                        setProviderSearchTerm((prev) => ({ ...prev, filter: gamesFilters.provider || "" }));
+                        setProviderDropdownOpen((prev) => ({ ...prev, filter: true }));
+                      }}
+                      className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                    />
+                    {providerDropdownOpen.filter && (
+                      <div className="absolute z-[9999] w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto provider-dropdown" style={{ position: 'absolute', zIndex: 9999 }}>
+                        <div className="p-2">
+                          {getUniqueProviders()
+                            .filter((provider) =>
+                              provider.toLowerCase().includes(providerSearchTerm.filter.toLowerCase())
+                            )
+                            .map((provider) => (
+                              <button
+                                key={provider}
+                                type="button"
+                                onClick={() => {
+                                  handleGamesFilterChange("provider", provider);
+                                  setProviderSearchTerm((prev) => ({ ...prev, filter: provider }));
+                                  setProviderDropdownOpen((prev) => ({ ...prev, filter: false }));
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
+                              >
+                                {provider}
+                              </button>
+                            ))}
+                          {getUniqueProviders().filter((provider) =>
+                            provider.toLowerCase().includes(providerSearchTerm.filter.toLowerCase())
+                          ).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-500">No providers found</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Game ID</label>
@@ -1035,7 +1127,14 @@ const MergedGameManagement: React.FC = () => {
                           colSpan={12}
                           className="px-6 py-8 text-center text-slate-400"
                         >
-                          No games found
+                          {error ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <span className="text-red-400">Error loading games</span>
+                              <span className="text-sm text-slate-500">{error}</span>
+                            </div>
+                          ) : (
+                            "No games available"
+                          )}
                         </td>
                       </tr>
                     ) : (
@@ -1124,11 +1223,6 @@ const MergedGameManagement: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       setEditingGame(game);
-                                      // Find provider_id from provider name
-                                      const foundProvider = providers.find(
-                                        (p) => p.name === game.provider || p.code === game.provider
-                                      );
-                                      setEditingProviderId(foundProvider?.id || "");
                                       setShowEditGameModal(true);
                                       closeDropdown();
                                     }}
@@ -1601,32 +1695,120 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Photo URL
+                    Photo URL <span className="text-slate-500 text-xs">(optional)</span>
                   </label>
                   <input
                     type="url"
-                    value={newGame.photo}
+                    value={newGame.photo || ""}
                     onChange={(e) =>
-                      setNewGame((prev) => ({ ...prev, photo: e.target.value }))
+                      setNewGame((prev) => ({ ...prev, photo: e.target.value || null }))
                     }
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Game ID
+                    Price <span className="text-slate-500 text-xs">(optional)</span>
                   </label>
                   <input
                     type="text"
-                    value={newGame.game_id}
+                    value={newGame.price || ""}
+                    onChange={(e) =>
+                      setNewGame((prev) => ({ ...prev, price: e.target.value || null }))
+                    }
+                    placeholder="e.g., 0.50"
+                    className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Game ID <span className="text-slate-500 text-xs">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newGame.game_id || ""}
                     onChange={(e) =>
                       setNewGame((prev) => ({
                         ...prev,
-                        game_id: e.target.value,
+                        game_id: e.target.value || null,
                       }))
                     }
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Provider <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search provider..."
+                      value={
+                        providerSearchTerm.create ||
+                        gameProviders.find((p) => p.id === newGame.provider_id)?.name ||
+                        ""
+                      }
+                      onChange={(e) => {
+                        setProviderSearchTerm((prev) => ({ ...prev, create: e.target.value }));
+                        setProviderDropdownOpen((prev) => ({ ...prev, create: true }));
+                        // Clear provider_id if search doesn't match selected provider
+                        if (newGame.provider_id) {
+                          const selectedProvider = gameProviders.find((p) => p.id === newGame.provider_id);
+                          if (!selectedProvider || !selectedProvider.name.toLowerCase().includes(e.target.value.toLowerCase())) {
+                            setNewGame((prev) => ({ ...prev, provider_id: "" }));
+                          }
+                        }
+                      }}
+                      onFocus={() => setProviderDropdownOpen((prev) => ({ ...prev, create: true }))}
+                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                    {providerDropdownOpen.create && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto provider-dropdown">
+                        <div className="p-2">
+                          {loadingGameProviders ? (
+                            <div className="px-3 py-2 text-sm text-slate-400">Loading providers...</div>
+                          ) : gameProviders.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-slate-500">
+                              No providers available. {gameProviders.length === 0 && "(Total: 0)"}
+                            </div>
+                          ) : (() => {
+                            const filtered = gameProviders.filter((provider) =>
+                              provider.name.toLowerCase().includes(providerSearchTerm.create.toLowerCase()) ||
+                              provider.code.toLowerCase().includes(providerSearchTerm.create.toLowerCase())
+                            );
+                            return filtered.length === 0 ? (
+                              <div className="px-3 py-2 text-sm text-slate-500">
+                                No providers match "{providerSearchTerm.create}". Total providers: {gameProviders.length}
+                              </div>
+                            ) : (
+                              filtered.map((provider) => (
+                                <button
+                                  key={provider.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewGame((prev) => ({
+                                      ...prev,
+                                      provider_id: provider.id,
+                                    }));
+                                    setProviderSearchTerm((prev) => ({ ...prev, create: provider.name }));
+                                    setProviderDropdownOpen((prev) => ({ ...prev, create: false }));
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${
+                                    newGame.provider_id === provider.id
+                                      ? "bg-red-600/20 text-red-400 border border-red-500/30"
+                                      : "text-slate-300 hover:bg-slate-700"
+                                  }`}
+                                >
+                                  {provider.name} ({provider.code})
+                                </button>
+                              ))
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -1659,51 +1841,6 @@ const MergedGameManagement: React.FC = () => {
                     }
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Provider *
-                  </label>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Search provider by name or code..."
-                      value={providerSearch}
-                      onChange={(e) => setProviderSearch(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
-                    />
-                    <select
-                      value={newGame.provider_id}
-                      onChange={(e) =>
-                        setNewGame((prev) => ({
-                          ...prev,
-                          provider_id: e.target.value,
-                        }))
-                      }
-                      required
-                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      disabled={loadingProviders}
-                    >
-                      <option value="">Select a provider</option>
-                      {providers
-                        .filter((provider) => {
-                          const q = providerSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            provider.name.toLowerCase().includes(q) ||
-                            provider.code.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((provider) => (
-                          <option key={provider.id} value={provider.id}>
-                            {provider.name} ({provider.code})
-                          </option>
-                        ))}
-                    </select>
-                    {loadingProviders && (
-                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
-                    )}
-                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
@@ -1787,14 +1924,14 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Photo URL
+                    Photo URL <span className="text-slate-500 text-xs">(optional)</span>
                   </label>
                   <input
                     type="url"
-                    value={editingGame.photo}
+                    value={editingGame.photo || ""}
                     onChange={(e) =>
                       setEditingGame((prev) =>
-                        prev ? { ...prev, photo: e.target.value } : null,
+                        prev ? { ...prev, photo: e.target.value || null } : null,
                       )
                     }
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
@@ -1802,18 +1939,107 @@ const MergedGameManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Game ID
+                    Price <span className="text-slate-500 text-xs">(optional)</span>
                   </label>
                   <input
                     type="text"
-                    value={editingGame.game_id}
+                    value={editingGame.price || ""}
                     onChange={(e) =>
                       setEditingGame((prev) =>
-                        prev ? { ...prev, game_id: e.target.value } : null,
+                        prev ? { ...prev, price: e.target.value || null } : null,
+                      )
+                    }
+                    placeholder="e.g., 0.50"
+                    className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Game ID <span className="text-slate-500 text-xs">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingGame.game_id || ""}
+                    onChange={(e) =>
+                      setEditingGame((prev) =>
+                        prev ? { ...prev, game_id: e.target.value || null } : null,
                       )
                     }
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Provider <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search provider..."
+                      value={
+                        providerSearchTerm.edit ||
+                        gameProviders.find((p) => p.id === editingGame.provider_id)?.name ||
+                        ""
+                      }
+                      onChange={(e) => {
+                        setProviderSearchTerm((prev) => ({ ...prev, edit: e.target.value }));
+                        setProviderDropdownOpen((prev) => ({ ...prev, edit: true }));
+                        // Clear provider_id if search doesn't match selected provider
+                        if (editingGame.provider_id) {
+                          const selectedProvider = gameProviders.find((p) => p.id === editingGame.provider_id);
+                          if (!selectedProvider || !selectedProvider.name.toLowerCase().includes(e.target.value.toLowerCase())) {
+                            setEditingGame((prev) => (prev ? { ...prev, provider_id: "" } : null));
+                          }
+                        }
+                      }}
+                      onFocus={() => setProviderDropdownOpen((prev) => ({ ...prev, edit: true }))}
+                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    />
+                    {providerDropdownOpen.edit && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto provider-dropdown">
+                        <div className="p-2">
+                          {loadingGameProviders ? (
+                            <div className="px-3 py-2 text-sm text-slate-400">Loading providers...</div>
+                          ) : gameProviders.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-slate-500">
+                              No providers available. {gameProviders.length === 0 && "(Total: 0)"}
+                            </div>
+                          ) : (() => {
+                            const filtered = gameProviders.filter((provider) =>
+                              provider.name.toLowerCase().includes(providerSearchTerm.edit.toLowerCase()) ||
+                              provider.code.toLowerCase().includes(providerSearchTerm.edit.toLowerCase())
+                            );
+                            return filtered.length === 0 ? (
+                              <div className="px-3 py-2 text-sm text-slate-500">
+                                No providers match "{providerSearchTerm.edit}". Total providers: {gameProviders.length}
+                              </div>
+                            ) : (
+                              filtered.map((provider) => (
+                                <button
+                                  key={provider.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingGame((prev) =>
+                                      prev ? { ...prev, provider_id: provider.id } : null
+                                    );
+                                    setProviderSearchTerm((prev) => ({ ...prev, edit: provider.name }));
+                                    setProviderDropdownOpen((prev) => ({ ...prev, edit: false }));
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${
+                                    editingGame.provider_id === provider.id
+                                      ? "bg-red-600/20 text-red-400 border border-red-500/30"
+                                      : "text-slate-300 hover:bg-slate-700"
+                                  }`}
+                                >
+                                  {provider.name} ({provider.code})
+                                </button>
+                              ))
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -1849,46 +2075,6 @@ const MergedGameManagement: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Provider *
-                  </label>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Search provider by name or code..."
-                      value={editProviderSearch}
-                      onChange={(e) => setEditProviderSearch(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
-                    />
-                    <select
-                      value={editingProviderId}
-                      onChange={(e) => setEditingProviderId(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      disabled={loadingProviders}
-                    >
-                      <option value="">Select a provider</option>
-                      {providers
-                        .filter((provider) => {
-                          const q = editProviderSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            provider.name.toLowerCase().includes(q) ||
-                            provider.code.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((provider) => (
-                          <option key={provider.id} value={provider.id}>
-                            {provider.name} ({provider.code})
-                          </option>
-                        ))}
-                    </select>
-                    {loadingProviders && (
-                      <p className="text-xs text-slate-400 mt-1">Loading providers...</p>
-                    )}
-                  </div>
-                </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center">
                     <input
@@ -1907,10 +2093,7 @@ const MergedGameManagement: React.FC = () => {
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button
-                  onClick={() => {
-                    setShowEditGameModal(false);
-                    setEditingProviderId("");
-                  }}
+                  onClick={() => setShowEditGameModal(false)}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-slate-700"
                 >
                   Cancel
