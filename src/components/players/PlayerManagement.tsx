@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Key,
   Users,
+  Trash2,
 } from "lucide-react";
 import { PlayerDetails } from "./PlayerDetails";
 import { EditPlayerModal } from "./EditPlayerModal";
@@ -31,6 +32,7 @@ import { useServices } from "../../contexts/ServicesContext";
 import { kycService } from "../../services/kycService";
 import { clientSvc } from "../../services/apiService";
 import { brandService, Brand } from "../../services/brandService";
+// cashbackService only used for bulk level progression action, not for fetching players
 import { cashbackService } from "../../services/cashbackService";
 import { playerManagementService } from "../../services/playerManagementService";
 import toast from "react-hot-toast";
@@ -147,14 +149,13 @@ export const PlayerManagement: React.FC = () => {
   const [resettingPasswordPlayer, setResettingPasswordPlayer] =
     useState<Player | null>(null);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [deletingPlayer, setDeletingPlayer] = useState<Player | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Copy functionality state
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
 
-  // VIP levels from database
-  const [vipLevels, setVipLevels] = useState<string[]>([]);
-  const [loadingVipLevels, setLoadingVipLevels] = useState(true);
-  const [cashbackTiers, setCashbackTiers] = useState<any[]>([]);
+  // Removed VIP levels state - backend provides vip_level in player data
 
   // Bulk operations state
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
@@ -207,60 +208,10 @@ export const PlayerManagement: React.FC = () => {
     }
   };
 
-  // Fetch VIP levels from database
-  const fetchVipLevels = async () => {
-    try {
-      setLoadingVipLevels(true);
-      const response = await adminSvc.get("/cashback/tiers");
-      if (response.success && response.data && Array.isArray(response.data)) {
-        const tiers = response.data.map((tier: any) => tier.tier_name);
-        setVipLevels(tiers);
-        setCashbackTiers(response.data); // Store full tier data for calculations
-      }
-    } catch (err) {
-      console.error("Failed to fetch VIP levels:", err);
-      // Fallback to hardcoded values if API fails
-      setVipLevels(["Bronze", "Silver", "Gold", "Platinum", "Diamond"]);
-      // Create mock tier data for fallback
-      setCashbackTiers([
-        { tier_name: "Bronze", tier_level: 1, min_ggr_required: 0 },
-        { tier_name: "Silver", tier_level: 2, min_ggr_required: 1000 },
-        { tier_name: "Gold", tier_level: 3, min_ggr_required: 5000 },
-        { tier_name: "Platinum", tier_level: 4, min_ggr_required: 15000 },
-        { tier_name: "Diamond", tier_level: 5, min_ggr_required: 50000 },
-      ]);
-    } finally {
-      setLoadingVipLevels(false);
-    }
-  };
+  // VIP levels are provided by backend in player data, no need to fetch separately
+  // Removed fetchVipLevels() - it was causing unnecessary API calls to /cashback/tiers
 
-  // Calculate cashback level based on total wagered amount
-  const calculateCashbackLevel = (
-    totalWagered: number,
-    cashbackTiers: any[],
-  ) => {
-    if (!cashbackTiers || cashbackTiers.length === 0) {
-      return "Bronze"; // Default level
-    }
-
-    // Sort tiers by level (ascending)
-    const sortedTiers = [...cashbackTiers].sort(
-      (a, b) => a.tier_level - b.tier_level,
-    );
-
-    // Find the highest tier the player qualifies for
-    let currentTier = sortedTiers[0]; // Start with the lowest tier
-
-    for (const tier of sortedTiers) {
-      if (totalWagered >= tier.min_ggr_required) {
-        currentTier = tier;
-      } else {
-        break;
-      }
-    }
-
-    return currentTier.tier_name;
-  };
+  // Removed calculateCashbackLevel - backend provides vip_level in player data
 
   // Bulk level progression function
   const handleBulkLevelProgression = async () => {
@@ -374,7 +325,7 @@ export const PlayerManagement: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Fetch players from backend
+  // Fetch players from backend using GET (not POST/CREATE)
   const fetchPlayers = async (page: number = 1, search: string = "") => {
     try {
       setLoading(true);
@@ -531,17 +482,11 @@ export const PlayerManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchVipLevels();
     fetchBrands();
+    // VIP levels are provided by backend in player data - no need to fetch separately
   }, []);
 
-  // Refetch players when cashback tiers are loaded to recalculate levels
-  useEffect(() => {
-    if (cashbackTiers.length > 0) {
-      fetchPlayers(currentPage, searchTerm);
-    }
-  }, [cashbackTiers, currentPage, searchTerm, sortBy, sortOrder]);
-
+  // Fetch players when filters change
   useEffect(() => {
     fetchPlayers(currentPage, searchTerm);
   }, [
@@ -940,6 +885,45 @@ export const PlayerManagement: React.FC = () => {
     }
   };
 
+  // const handleDeletePlayer = async () => {
+  //   if (!deletingPlayer || isDeleting) return;
+
+  //   setIsDeleting(true);
+  //   try {
+  //     const response = await adminSvc.delete(`/player-management/${deletingPlayer.id}`);
+  //     if (response.success) {
+  //       toast.success("Player deleted successfully");
+  //       setDeletingPlayer(null);
+  //       // Refresh the players list
+  //       fetchPlayers(currentPage, searchTerm);
+  //     } else {
+  //       toast.error(response.message || "Failed to delete player");
+  //     }
+  //   } catch (error: any) {
+  //     console.error("Failed to delete player:", error);
+  //     toast.error(error.message || "Failed to delete player");
+  //   } finally {
+  //     setIsDeleting(false);
+  //   }
+  // };
+
+  const handleViewPlayerDetails = async (playerId: string) => {
+    try {
+      // Fetch player details using GET /api/admin/player-management/:id
+      const response = await adminSvc.get(`/player-management/${playerId}`);
+      if (response.success && response.data) {
+        // Set the selected player to show details
+        setSelectedPlayer(playerId);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        toast.error("Failed to load player details");
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch player details:", error);
+      toast.error(error.message || "Failed to load player details");
+    }
+  };
+
   const handleResetPassword = async () => {
     if (!resettingPasswordPlayer) return;
 
@@ -1127,7 +1111,7 @@ export const PlayerManagement: React.FC = () => {
       </div>
 
       {/* Filters Section - match game-management */}
-      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
+      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
             Filters
@@ -1192,7 +1176,7 @@ export const PlayerManagement: React.FC = () => {
               </button>
               {showTestAccountFilter && (
                 <div
-                  className="absolute top-full left-0 right-0 mt-3 rounded-xl p-4 z-[9999] min-w-[200px]"
+                  className="absolute top-full left-0 right-0 mt-3 rounded-xl p-4 z-[10000] min-w-[200px]"
                   style={{
                     backgroundColor: "#111827",
                     border: "2px solid #4B5563",
@@ -1270,7 +1254,7 @@ export const PlayerManagement: React.FC = () => {
               </button>
               {showBrandFilter && (
                 <div
-                  className="absolute top-full left-0 right-0 mt-3 rounded-xl p-4 z-[9999] min-w-[200px]"
+                  className="absolute top-full left-0 right-0 mt-3 rounded-xl p-4 z-[10000] min-w-[200px]"
                   style={{
                     backgroundColor: "#111827",
                     border: "2px solid #4B5563",
@@ -1321,7 +1305,7 @@ export const PlayerManagement: React.FC = () => {
       </div>
 
       {/* Players Table - match game-management */}
-      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm">
+      <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-sm relative z-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/80">
           <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider">
             Players
@@ -1461,13 +1445,28 @@ export const PlayerManagement: React.FC = () => {
                     </div>
                   </div>
                 </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-slate-300 uppercase tracking-wider w-20">
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-300 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
-              {players.map((player, index) => (
+              {players.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Users className="h-12 w-12 text-gray-600" />
+                      <p className="text-sm font-medium">No players found</p>
+                      <p className="text-xs text-gray-500">
+                        {searchTerm || testAccountFilter !== null || brandFilter.length > 0
+                          ? "Try adjusting your filters"
+                          : "Players will appear here once they are registered"}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                players.map((player, index) => (
                 <tr
                   key={index}
                   className={`border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${
@@ -1648,7 +1647,7 @@ export const PlayerManagement: React.FC = () => {
                     )}
                   </td>
                   <td className="py-2 px-2">
-                    <div className="relative dropdown-container">
+                    <div className="relative dropdown-container flex justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1685,7 +1684,7 @@ export const PlayerManagement: React.FC = () => {
                             });
                           }
                         }}
-                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg relative z-10"
+                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg relative z-10 mx-auto"
                         title="Actions"
                       >
                         <MoreVertical className="h-4 w-4" />
@@ -1718,10 +1717,9 @@ export const PlayerManagement: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedPlayer(player.id);
+                                handleViewPlayerDetails(player.id);
                                 setOpenDropdownId(null);
                                 setDropdownPosition(null);
-                                window.scrollTo({ top: 0, behavior: "smooth" });
                               }}
                               onMouseDown={(e) => e.stopPropagation()}
                               className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
@@ -1854,7 +1852,8 @@ export const PlayerManagement: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>
@@ -2067,6 +2066,65 @@ export const PlayerManagement: React.FC = () => {
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
               >
                 {processingBlock ? "Unblocking..." : "Unblock Withdrawals"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Player Modal */}
+      {deletingPlayer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-md">
+            <div className="p-6 border-b border-gray-700">
+              <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                <Trash2 className="h-5 w-5 text-red-400" />
+                <span>Delete Player</span>
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">
+                Player:{" "}
+                <span className="text-white">{deletingPlayer.username}</span>
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-gray-300">
+                Are you sure you want to delete player{" "}
+                <span className="font-semibold text-white">
+                  {deletingPlayer.username}
+                </span>
+                ? This action cannot be undone.
+              </p>
+              <div className="bg-red-900/20 border border-red-600/50 rounded-lg p-4">
+                <p className="text-red-400 text-sm">
+                  <strong>Warning:</strong> This will permanently delete the
+                  player account and all associated data.
+                </p>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-700 flex items-center justify-end space-x-3">
+              <button
+                onClick={() => setDeletingPlayer(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePlayer}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 flex items-center space-x-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete Player</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

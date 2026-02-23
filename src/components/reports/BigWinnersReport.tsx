@@ -101,7 +101,7 @@ export const BigWinnersReport: React.FC = () => {
   useEffect(() => {
     const fetchGames = async () => {
       if (
-        gameSearchTerm.length >= 2 ||
+        gameSearchTerm.length >= 1 ||
         (gameSearchTerm.length === 0 && showGameDropdown)
       ) {
         try {
@@ -581,7 +581,7 @@ export const BigWinnersReport: React.FC = () => {
                 <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
               {showGameDropdown &&
-                (gameSearchTerm.length >= 2 || games.length > 0) && (
+                (gameSearchTerm.length >= 1 || games.length > 0) && (
                   <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {loadingGames ? (
                       <div className="p-3 text-center text-gray-400 text-sm">
@@ -618,7 +618,7 @@ export const BigWinnersReport: React.FC = () => {
                           </div>
                         ))}
                       </>
-                    ) : gameSearchTerm.length >= 2 ? (
+                    ) : gameSearchTerm.length >= 1 ? (
                       <div className="p-3 text-center text-gray-400 text-sm">
                         No games found
                       </div>

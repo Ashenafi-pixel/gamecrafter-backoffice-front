@@ -61,6 +61,7 @@ export default function ProviderManagement() {
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(undefined);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     perPage: 10,
@@ -268,9 +269,36 @@ export default function ProviderManagement() {
     }
   };
 
+  const toggleDropdown = (id: string) => {
+    setActiveDropdown(activeDropdown === id ? null : id);
+  };
+
+  const closeDropdown = () => {
+    setActiveDropdown(null);
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        activeDropdown &&
+        !(event.target as Element).closest(".dropdown-container")
+      ) {
+        closeDropdown();
+      }
+    };
+
+    if (activeDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [activeDropdown]);
 
   return (
     <div className="space-y-6">

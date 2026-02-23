@@ -52,6 +52,8 @@ const BrandManagement: React.FC = () => {
     integration_type: "API",
     is_active: true,
   });
+  const [showSignatureInput, setShowSignatureInput] = useState(false);
+  const [signature, setSignature] = useState("");
 
   const loadBrands = useCallback(async () => {
     setLoading(true);
@@ -215,9 +217,36 @@ const BrandManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
+  const toggleDropdown = (id: number) => {
+    setOpenDropdownId(openDropdownId === id ? null : id);
+  };
+
+  const closeDropdown = () => {
+    setOpenDropdownId(null);
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        openDropdownId !== null &&
+        !(event.target as Element).closest(".dropdown-container")
+      ) {
+        closeDropdown();
+      }
+    };
+
+    if (openDropdownId !== null) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [openDropdownId]);
 
   const activeCount = brands.filter((b) => b.is_active).length;
   const inactiveCount = brands.length - activeCount;
@@ -611,6 +640,34 @@ const BrandManagement: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
+                    id="create-show-signature"
+                    checked={showSignatureInput}
+                    onChange={(e) => {
+                      setShowSignatureInput(e.target.checked);
+                      if (!e.target.checked) {
+                        setSignature("");
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-red-600 focus:ring-red-500/20 focus:ring-2"
+                  />
+                  <label htmlFor="create-show-signature" className="text-sm text-slate-300">Add Signature</label>
+                </div>
+                {showSignatureInput && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Signature *</label>
+                    <input
+                      type="text"
+                      value={signature}
+                      onChange={(e) => setSignature(e.target.value)}
+                      placeholder="Enter signature"
+                      className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-colors"
+                      required={showSignatureInput}
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
                     id="create-is_active"
                     checked={newBrand.is_active}
                     onChange={(e) => setNewBrand((prev) => ({ ...prev, is_active: e.target.checked }))}
@@ -621,7 +678,11 @@ const BrandManagement: React.FC = () => {
               </div>
               <div className="p-6 border-t border-slate-700/80 flex justify-end gap-3">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setShowSignatureInput(false);
+                    setSignature("");
+                  }}
                   className="px-4 py-2.5 bg-slate-700/80 text-white rounded-xl hover:bg-slate-700 border border-slate-600/50 transition-colors font-medium"
                 >
                   Cancel

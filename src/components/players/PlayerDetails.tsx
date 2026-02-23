@@ -523,9 +523,18 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
           });
         }
         setPlayerLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch player details:', error);
-        toast.error('Failed to load player details');
+        // Don't show error toast - use the player prop as fallback
+        // The player data is already available from the list
+        setPlayerDetails({ 
+          player: player,
+          statistics: null,
+          suspension_history: [],
+          balance_logs: [],
+          balances: [],
+          game_activity: [],
+        });
         setPlayerLoading(false);
       }
     };
@@ -538,15 +547,21 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     const fetchStatistics = async () => {
       try {
         setStatisticsLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use correct endpoint: GET /api/admin/player-management/:id
+        const response = await adminSvc.get(`/player-management/${player.id}`);
 
         // Fix: Access the correct nested structure
         const statisticsData =
-          response.data?.data?.statistics || response.data?.statistics;
-        setStatistics(statisticsData);
+          response.data?.statistics || 
+          response.data?.data?.statistics || 
+          response.data?.player?.statistics;
+        if (statisticsData) {
+          setStatistics(statisticsData);
+        }
         setStatisticsLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch statistics:', error);
+        // Silently fail - statistics are optional
         setStatisticsLoading(false);
       }
     };
@@ -559,7 +574,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     const fetchTransactions = async () => {
       try {
         setTransactionsLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use correct endpoint: GET /api/admin/player-management/:id
+        const response = await adminSvc.get(`/player-management/${player.id}`);
         const logs = response.data.balance_logs || [];
         // Sort by timestamp in descending order (newest first)
         const sortedLogs = [...logs].sort((a, b) => {
@@ -794,7 +810,7 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
       try {
         setSuspensionLoading(true);
         const response: any = await adminSvc.get(
-          `/players/${player.id}/details`,
+          `/player-management/${player.id}`,
         );
 
         // Fix: Access the correct nested structure
@@ -1035,7 +1051,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch deposits:', error);
-        toast.error('Failed to fetch deposits');
+        // Don't show error toast - deposits are optional
+        // toast.error('Failed to fetch deposits');
         setDeposits([]);
         setDepositsMeta(null);
       } finally {
@@ -1116,7 +1133,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch withdrawals:', error);
-        toast.error('Failed to fetch withdrawals');
+        // Don't show error toast - withdrawals are optional
+        // toast.error('Failed to fetch withdrawals');
         setWithdrawals([]);
         setWithdrawalsMeta(null);
       } finally {
@@ -1180,7 +1198,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch welcome bonus:', error);
-        toast.error('Failed to fetch welcome bonus transactions');
+        // Don't show error toast - welcome bonus is optional
+        // toast.error('Failed to fetch welcome bonus transactions');
         setWelcomeBonus([]);
         setWelcomeBonusMeta(null);
       } finally {
@@ -1195,7 +1214,7 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
   useEffect(() => {
     const fetchBalances = async () => {
       try {
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        const response = await adminSvc.get(`/player-management/${player.id}`);
         console.log('Player details response:', response);
         console.log('Response data:', response.data);
 
