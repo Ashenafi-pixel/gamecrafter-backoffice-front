@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle, MoreVertical, Eye } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle, MoreVertical, Eye, Globe, List, Trash } from "lucide-react";
 import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import {
   Brand,
   CreateBrandRequest,
   UpdateBrandRequest,
+  AllowedOrigin,
   brandService,
 } from "../../services/brandService";
 
@@ -54,6 +55,16 @@ const BrandManagement: React.FC = () => {
   });
   const [showSignatureInput, setShowSignatureInput] = useState(false);
   const [signature, setSignature] = useState("");
+
+  // Allowed origins
+  const [brandForOrigins, setBrandForOrigins] = useState<Brand | null>(null);
+  const [allowedOriginsList, setAllowedOriginsList] = useState<AllowedOrigin[]>([]);
+  const [showAllowedOriginsModal, setShowAllowedOriginsModal] = useState(false);
+  const [showAddOriginModal, setShowAddOriginModal] = useState(false);
+  const [newOriginInput, setNewOriginInput] = useState("");
+  const [loadingOrigins, setLoadingOrigins] = useState(false);
+  const [addingOrigin, setAddingOrigin] = useState(false);
+  const [deletingOriginId, setDeletingOriginId] = useState<number | null>(null);
 
   const loadBrands = useCallback(async () => {
     setLoading(true);
@@ -223,6 +234,82 @@ const BrandManagement: React.FC = () => {
 
   const closeDropdown = () => {
     setOpenDropdownId(null);
+  };
+
+  const fetchAllowedOrigins = useCallback(async (brand: Brand) => {
+    setLoadingOrigins(true);
+    setAllowedOriginsList([]);
+    try {
+      const response = await brandService.getAllowedOrigins(brand.id);
+      if (response.success && response.data?.origins) {
+        setAllowedOriginsList(response.data.origins);
+      } else {
+        setAllowedOriginsList([]);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load allowed origins");
+      setAllowedOriginsList([]);
+    } finally {
+      setLoadingOrigins(false);
+    }
+  }, []);
+
+  const openAllowedOriginsModal = (brand: Brand) => {
+    setBrandForOrigins(brand);
+    setShowAllowedOriginsModal(true);
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+    fetchAllowedOrigins(brand);
+  };
+
+  const openAddOriginModal = (brand: Brand) => {
+    setBrandForOrigins(brand);
+    setNewOriginInput("");
+    setShowAddOriginModal(true);
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+  };
+
+  const handleAddOrigin = async () => {
+    if (!brandForOrigins || !newOriginInput.trim() || addingOrigin) return;
+    const origin = newOriginInput.trim();
+    setAddingOrigin(true);
+    try {
+      const response = await brandService.addAllowedOrigin(brandForOrigins.id, origin);
+      if (response.success) {
+        toast.success("Allowed origin added");
+        setNewOriginInput("");
+        setShowAddOriginModal(false);
+        if (brandForOrigins) {
+          await fetchAllowedOrigins(brandForOrigins);
+          setShowAllowedOriginsModal(true);
+        }
+      } else {
+        toast.error(response.message || "Failed to add origin");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add origin");
+    } finally {
+      setAddingOrigin(false);
+    }
+  };
+
+  const handleDeleteOrigin = async (originId: number) => {
+    if (!brandForOrigins || deletingOriginId !== null) return;
+    setDeletingOriginId(originId);
+    try {
+      const response = await brandService.deleteAllowedOrigin(brandForOrigins.id, originId);
+      if (response.success) {
+        toast.success("Allowed origin removed");
+        setAllowedOriginsList((prev) => prev.filter((o) => o.id !== originId));
+      } else {
+        toast.error(response.message || "Failed to delete origin");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete origin");
+    } finally {
+      setDeletingOriginId(null);
+    }
   };
 
   const handlePageChange = (newPage: number) => {
@@ -508,6 +595,39 @@ const BrandManagement: React.FC = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    openAddOriginModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Globe className="h-4 w-4" />
+                                  <span>Add Allowed Origin</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAllowedOriginsModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <List className="h-4 w-4" />
+                                  <span>View Allowed Origins</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAllowedOriginsModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                  <span>Delete Allowed Origin</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleDeleteBrand(brand);
                                     setOpenDropdownId(null);
                                     setDropdownPosition(null);
@@ -561,6 +681,134 @@ const BrandManagement: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Add Allowed Origin Modal */}
+        {showAddOriginModal && brandForOrigins && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-b from-slate-900/98 to-slate-950/98 border border-slate-800/80 rounded-2xl w-full max-w-md shadow-2xl">
+              <div className="p-6 border-b border-slate-700/80 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">Add Allowed Origin</h2>
+                <button
+                  onClick={() => {
+                    setShowAddOriginModal(false);
+                    setBrandForOrigins(null);
+                    setNewOriginInput("");
+                  }}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-slate-400 text-sm">Brand: <span className="text-white font-medium">{brandForOrigins.name}</span></p>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Origin URL *</label>
+                  <input
+                    type="url"
+                    value={newOriginInput}
+                    onChange={(e) => setNewOriginInput(e.target.value)}
+                    placeholder="https://game.example.com"
+                    className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowAddOriginModal(false);
+                      setBrandForOrigins(null);
+                      setNewOriginInput("");
+                    }}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddOrigin}
+                    disabled={!newOriginInput.trim() || addingOrigin}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    {addingOrigin ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                        Adding...
+                      </>
+                    ) : (
+                      "Add Origin"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View / Delete Allowed Origins Modal */}
+        {showAllowedOriginsModal && brandForOrigins && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-b from-slate-900/98 to-slate-950/98 border border-slate-800/80 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-700/80 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-xl font-semibold text-white">Allowed Origins — {brandForOrigins.name}</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowAddOriginModal(true);
+                      setShowAllowedOriginsModal(false);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAllowedOriginsModal(false);
+                      setBrandForOrigins(null);
+                      setAllowedOriginsList([]);
+                    }}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                {loadingOrigins ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500" />
+                  </div>
+                ) : allowedOriginsList.length === 0 ? (
+                  <p className="text-slate-400 text-center py-8">No allowed origins. Add one from the dropdown or click Add above.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {allowedOriginsList.map((o) => (
+                      <li
+                        key={o.id}
+                        className="flex items-center justify-between gap-3 py-2 px-3 bg-slate-800/60 border border-slate-700/80 rounded-xl"
+                      >
+                        <span className="text-white text-sm truncate flex-1">{o.origin}</span>
+                        <span className="text-slate-500 text-xs flex-shrink-0">
+                          {new Date(o.created_at).toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteOrigin(o.id)}
+                          disabled={deletingOriginId === o.id}
+                          className="p-2 text-red-400 hover:bg-red-900/30 rounded-lg disabled:opacity-50 transition-colors"
+                          title="Delete origin"
+                        >
+                          {deletingOriginId === o.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-400" />
+                          ) : (
+                            <Trash className="h-4 w-4" />
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Modal */}
         {showCreateModal && (
