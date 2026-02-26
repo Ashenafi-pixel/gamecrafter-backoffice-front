@@ -11,9 +11,11 @@ import {
   CheckCircle2,
   XCircle,
   Link2,
+  FileText,
   MoreVertical,
   Eye,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import {
   providerService,
@@ -51,6 +53,12 @@ export default function ProviderManagement() {
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [viewingProvider, setViewingProvider] = useState<Provider | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<Provider | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+    above?: boolean;
+  } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(undefined);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -72,23 +80,70 @@ export default function ProviderManagement() {
         ...(searchTerm && { search: searchTerm }),
         ...(isActiveFilter !== undefined && { is_active: isActiveFilter }),
       };
+      console.log("Fetching providers with params:", params);
       const response = await providerService.getProviders(params);
+      console.log("Provider API response:", response);
+      
       if (response.success && response.data) {
-        setProviders(response.data.providers || []);
+        // Handle different response structures
+        let providersList: Provider[] = [];
+        
+        // Check if response.data has providers array (GetProvidersResponse format)
+        if (response.data.providers && Array.isArray(response.data.providers)) {
+          providersList = response.data.providers;
+        } 
+        // Check if response.data is directly an array
+        else if (Array.isArray(response.data)) {
+          providersList = response.data;
+        }
+        // Check if response.data is an object with nested data
+        else if ((response.data as any).data) {
+          const nestedData = (response.data as any).data;
+          if (Array.isArray(nestedData)) {
+            providersList = nestedData;
+          } else if (nestedData.providers && Array.isArray(nestedData.providers)) {
+            providersList = nestedData.providers;
+          }
+        }
+        
+        console.log("Extracted providers list:", providersList);
+        console.log("Number of providers:", providersList.length);
+        
+        setProviders(providersList);
+        
+        // Update pagination if available
+        const totalCount = response.data.total_count !== undefined 
+          ? response.data.total_count 
+          : providersList.length;
+        const totalPages = response.data.total_pages !== undefined 
+          ? response.data.total_pages 
+          : Math.ceil(totalCount / pagination.perPage);
+        const currentPage = response.data.current_page !== undefined 
+          ? response.data.current_page 
+          : pagination.page;
+        
         setPagination((prev) => ({
           ...prev,
-          total: response.data!.total_count,
-          totalPages: response.data!.total_pages,
-          currentPage: response.data!.current_page,
+          total: totalCount,
+          totalPages: totalPages,
+          currentPage: currentPage,
         }));
+        
+        if (providersList.length === 0) {
+          console.warn("No providers found in response. Full response:", JSON.stringify(response, null, 2));
+        }
       } else {
         const errorMessage = response.message || "Failed to load providers";
+        console.error("Provider fetch failed:", errorMessage);
+        console.error("Response:", response);
         setError(errorMessage);
         setProviders([]);
         toast.error(errorMessage);
       }
     } catch (err: any) {
       const errorMessage = err.message || "Failed to load providers";
+      console.error("Error fetching providers:", err);
+      console.error("Error details:", err.response?.data || err);
       setError(errorMessage);
       setProviders([]);
       toast.error(errorMessage);
@@ -101,18 +156,40 @@ export default function ProviderManagement() {
     loadProviders();
   }, [loadProviders]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (openDropdownId !== null) {
+        const isDropdownButton = target.closest(".dropdown-container");
+        const isPortalDropdown = target.closest(".action-dropdown-portal");
+        if (!isDropdownButton && !isPortalDropdown) {
+          setOpenDropdownId(null);
+          setDropdownPosition(null);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openDropdownId]);
+
   const activeCount = providers.filter((p) => p.is_active).length;
   const inactiveCount = providers.length - activeCount;
   const totalGames = providers.reduce((sum, p) => sum + (p.game_count || 0), 0);
 
-  const handleCreateProvider = async (data: CreateProviderRequest) => {
-    if (creating || !data.name?.trim() || !data.code?.trim()) {
-      if (!data.name?.trim() || !data.code?.trim()) toast.error("Name and Code are required");
+  const handleCreateProvider = async (data: CreateProviderRequest | UpdateProviderRequest) => {
+    // Type guard to ensure required fields are present
+    if (!data.name?.trim() || !data.code?.trim()) {
+      toast.error("Name and Code are required");
       return;
     }
+    if (creating) return;
     setCreating(true);
     try {
-      const response = await providerService.createProvider(data);
+      const response = await providerService.createProvider(data as CreateProviderRequest);
       if (response.success) {
         toast.success("Provider created successfully");
         setShowCreateModal(false);
@@ -152,7 +229,6 @@ export default function ProviderManagement() {
     setToggling(provider.id);
     try {
       const response = await providerService.updateProvider(provider.id, {
-        id: provider.id,
         is_active: !provider.is_active,
       });
       if (response.success) {
@@ -252,7 +328,9 @@ export default function ProviderManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-slate-400 text-sm font-medium">Total Providers</p>
-                <p className="text-2xl font-bold text-white mt-1">{pagination.total}</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {pagination.total > 0 ? pagination.total : providers.length}
+                </p>
               </div>
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/50">
                 <Server className="h-6 w-6 text-red-500" />
@@ -424,51 +502,104 @@ export default function ProviderManagement() {
                         {new Date(provider.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="relative dropdown-container flex justify-end">
+                        <div className="relative dropdown-container">
                           <button
-                            onClick={() => toggleDropdown(provider.id)}
-                            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (openDropdownId === provider.id) {
+                                setOpenDropdownId(null);
+                                setDropdownPosition(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const topPosition = rect.bottom + 4;
+                                const leftPosition = rect.left + rect.width / 2;
+                                const viewportHeight = window.innerHeight;
+                                const spaceBelow = viewportHeight - rect.bottom;
+                                let finalTop = topPosition;
+                                if (spaceBelow < 100) {
+                                  finalTop = rect.top - 4;
+                                }
+                                setOpenDropdownId(provider.id);
+                                setDropdownPosition({
+                                  top: finalTop,
+                                  left: leftPosition,
+                                  above: spaceBelow < 100,
+                                });
+                              }
+                            }}
+                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg relative z-10"
                             title="Actions"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
 
-                          {activeDropdown === provider.id && (
-                            <div className="absolute right-0 mt-1 w-48 bg-slate-800/95 border border-slate-700 rounded-xl shadow-xl z-50 py-1 backdrop-blur-sm">
-                              <button
-                                onClick={() => {
-                                  setViewingProvider(provider);
-                                  setShowViewModal(true);
-                                  closeDropdown();
+                          {openDropdownId === provider.id &&
+                            dropdownPosition &&
+                            typeof document !== "undefined" &&
+                            createPortal(
+                              <div
+                                className="fixed rounded-lg z-[99999] min-w-[160px] action-dropdown-portal"
+                                style={{
+                                  top: `${dropdownPosition.top}px`,
+                                  left: `${dropdownPosition.left}px`,
+                                  transform: "translateX(-50%)",
+                                  backgroundColor: "#111827",
+                                  border: "2px solid #4B5563",
+                                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                                  backdropFilter: "none",
+                                  maxHeight: `${Math.min(400, window.innerHeight - dropdownPosition.top - 8)}px`,
+                                  overflowY: "auto",
+                                  scrollbarWidth: "thin",
+                                  scrollbarColor: "#6B7280 #374151",
+                                  position: "fixed",
                                 }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
                               >
-                                <Eye className="h-4 w-4 mr-3" />
-                                View Details
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingProvider(provider);
-                                  setShowEditModal(true);
-                                  closeDropdown();
-                                }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
-                              >
-                                <Edit className="h-4 w-4 mr-3" />
-                                Edit Provider
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleDeleteProvider(provider);
-                                  closeDropdown();
-                                }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-slate-700/80 hover:text-red-300 transition-colors"
-                              >
-                                <Trash2 className="h-4 w-4 mr-3" />
-                                Delete Provider
-                              </button>
-                            </div>
-                          )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingProvider(provider);
+                                    setShowViewModal(true);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span>View Details</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingProvider(provider);
+                                    setShowEditModal(true);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteProvider(provider);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>,
+                              document.body,
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -532,7 +663,7 @@ export default function ProviderManagement() {
             setShowEditModal(false);
             setEditingProvider(null);
           }}
-          onSave={(data) => handleUpdateProvider(editingProvider.id, { ...data, id: editingProvider.id })}
+          onSave={(data) => handleUpdateProvider(editingProvider.id, data)}
           saving={updating}
           submitLabel="Update"
         />

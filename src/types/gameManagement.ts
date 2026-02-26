@@ -11,12 +11,14 @@ export interface Game {
   name: string;
   status: GameStatus;
   timestamp: string;
-  photo: string;
+  photo?: string | null;
+  price?: string | null;
   enabled: boolean;
-  game_id: string;
-  internal_name: string;
-  integration_partner: string;
-  provider: string;
+  game_id?: string | null;
+  internal_name?: string | null;
+  integration_partner?: string | null;
+  provider?: string | null;
+  provider_id: string; // UUID
   created_at: string;
   updated_at: string;
   rtp_percent?: string;
@@ -25,33 +27,40 @@ export interface Game {
 export interface CreateGameRequest {
   name: string;
   status: GameStatus;
-  photo?: string;
+  photo?: string | null;
+  price?: string | null;
   enabled: boolean;
-  game_id?: string;
-  internal_name?: string;
-  integration_partner?: string;
-  provider_id: string;
+  game_id?: string | null;
+  internal_name?: string | null;
+  integration_partner?: string | null;
+  provider?: string | null;
+  provider_id: string; // UUID, required
 }
 
 export interface UpdateGameRequest {
   name?: string;
   status?: GameStatus;
-  photo?: string;
+  photo?: string | null;
+  price?: string | null;
   enabled?: boolean;
-  game_id?: string;
-  internal_name?: string;
-  integration_partner?: string;
-  provider_id?: string;
+  game_id?: string | null;
+  internal_name?: string | null;
+  integration_partner?: string | null;
+  provider?: string | null;
+  provider_id?: string; // UUID
 }
 
-// Payload returned in the API `data` field for game list endpoints
 export interface GameListResponse {
-  games: Game[];
-  total_count: number;
-  total?: number; // fallback for older responses
-  page: number;
-  per_page: number;
-  total_pages: number;
+  success: boolean;
+  data: {
+    games: Game[];
+    total_count: number;
+    total?: number; // fallback
+    page: number;
+    per_page: number;
+    total_pages: number;
+  };
+  message: string;
 }
 
 export interface GameFilters {

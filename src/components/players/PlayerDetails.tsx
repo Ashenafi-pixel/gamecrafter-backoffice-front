@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useServices } from '../../contexts/ServicesContext';
 import { cashbackService } from '../../services/cashbackService';
+import { playerManagementService } from '../../services/playerManagementService';
 import { KYCManagement } from '../kyc/KYCManagement';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -470,35 +471,97 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     const fetchPlayerDetails = async () => {
       try {
         setPlayerLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use player-management API instead of /players/{id}/details
+        const response = await playerManagementService.getPlayerById(Number(player.id));
         console.log('Player details response:', response);
-        const playerData = response.data?.data || response.data;
-        setPlayerDetails(playerData);
+        // The response.data is GetPlayerResponse which has a 'player' property
+        // We need to wrap it in the PlayerDetailsData structure that the component expects
+        const playerData = response.data?.player;
+        if (playerData) {
+          // Map the API player data to the PlayerDetails Player interface format
+          const mappedPlayer = {
+            id: String(playerData.id),
+            username: playerData.username || '',
+            email: playerData.email || '',
+            phone_number: playerData.phone || '',
+            first_name: playerData.first_name || '',
+            last_name: playerData.last_name || '',
+            date_of_birth: playerData.date_of_birth || '',
+            street_address: playerData.street_address || '',
+            country: playerData.country || '',
+            state: playerData.state || '',
+            city: '', // Not in API response
+            postal_code: playerData.postal_code || '',
+            kyc_status: 'PENDING', // Not in API response, default
+            is_email_verified: false, // Not in API response, default
+            referral_code: '', // Not in API response
+            user_type: 'PLAYER', // Not in API response, default
+            type: 'PLAYER', // Not in API response, default
+            status: 'ACTIVE', // Not in API response, default
+            default_currency: playerData.default_currency || 'USD',
+            profile_picture: '', // Not in API response
+            created_at: playerData.created_at || '',
+            source: '', // Not in API response
+          };
+          setPlayerDetails({
+            player: mappedPlayer,
+            suspension_history: [],
+            balance_logs: [],
+            balances: [],
+            game_activity: [],
+            statistics: {
+              total_wagered: "0",
+              net_pl: "0",
+              sessions: 0,
+              total_bets: 0,
+              total_wins: 0,
+              total_losses: 0,
+              win_rate: "0",
+              avg_bet_size: "0",
+              last_activity: "",
+            },
+          });
+        }
         setPlayerLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch player details:', error);
-        toast.error('Failed to load player details');
+        // Don't show error toast - use the player prop as fallback
+        // The player data is already available from the list
+        setPlayerDetails({ 
+          player: player,
+          statistics: null,
+          suspension_history: [],
+          balance_logs: [],
+          balances: [],
+          game_activity: [],
+        });
         setPlayerLoading(false);
       }
     };
 
     fetchPlayerDetails();
-  }, [player.id, adminSvc]);
+  }, [player.id]);
 
   // Fetch statistics separately
   useEffect(() => {
     const fetchStatistics = async () => {
       try {
         setStatisticsLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use correct endpoint: GET /api/admin/player-management/:id
+        const response = await adminSvc.get(`/player-management/${player.id}`);
 
         // Fix: Access the correct nested structure
         const statisticsData =
-          response.data?.data?.statistics || response.data?.statistics;
-        setStatistics(statisticsData);
+          response.data?.statistics || 
+          response.data?.data?.statistics || 
+          response.data?.player?.statistics;
+        if (statisticsData) {
+          setStatistics(statisticsData);
+        }
         setStatisticsLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch statistics:', error);
+        // Silently fail - statistics are optional
         setStatisticsLoading(false);
       }
     };
@@ -511,7 +574,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
     const fetchTransactions = async () => {
       try {
         setTransactionsLoading(true);
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        // Use correct endpoint: GET /api/admin/player-management/:id
+        const response = await adminSvc.get(`/player-management/${player.id}`);
         const logs = response.data.balance_logs || [];
         // Sort by timestamp in descending order (newest first)
         const sortedLogs = [...logs].sort((a, b) => {
@@ -746,7 +810,7 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
       try {
         setSuspensionLoading(true);
         const response: any = await adminSvc.get(
-          `/players/${player.id}/details`,
+          `/player-management/${player.id}`,
         );
 
         // Fix: Access the correct nested structure
@@ -987,7 +1051,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch deposits:', error);
-        toast.error('Failed to fetch deposits');
+        // Don't show error toast - deposits are optional
+        // toast.error('Failed to fetch deposits');
         setDeposits([]);
         setDepositsMeta(null);
       } finally {
@@ -1068,7 +1133,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch withdrawals:', error);
-        toast.error('Failed to fetch withdrawals');
+        // Don't show error toast - withdrawals are optional
+        // toast.error('Failed to fetch withdrawals');
         setWithdrawals([]);
         setWithdrawalsMeta(null);
       } finally {
@@ -1132,7 +1198,8 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
         }
       } catch (error) {
         console.error('Failed to fetch welcome bonus:', error);
-        toast.error('Failed to fetch welcome bonus transactions');
+        // Don't show error toast - welcome bonus is optional
+        // toast.error('Failed to fetch welcome bonus transactions');
         setWelcomeBonus([]);
         setWelcomeBonusMeta(null);
       } finally {
@@ -1147,7 +1214,7 @@ export const PlayerDetails: React.FC<PlayerDetailsProps> = ({
   useEffect(() => {
     const fetchBalances = async () => {
       try {
-        const response = await adminSvc.get(`/players/${player.id}/details`);
+        const response = await adminSvc.get(`/player-management/${player.id}`);
         console.log('Player details response:', response);
         console.log('Response data:', response.data);
 

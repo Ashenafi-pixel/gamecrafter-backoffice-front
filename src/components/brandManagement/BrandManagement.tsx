@@ -1,27 +1,17 @@
 import React, { useState, useEffect, useCallback } from "react";
-import {
-  Plus,
-  Search,
-  Edit,
-  Trash2,
-  RefreshCw,
-  X,
-  Building2,
-  CheckCircle2,
-  XCircle,
-  MoreVertical,
-  Eye,
-} from "lucide-react";
+import { Plus, Search, Edit, Trash2, RefreshCw, X, Building2, FileText, CheckCircle2, XCircle, MoreVertical, Eye, Globe, List, Trash } from "lucide-react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import {
-  brandService,
   Brand,
   CreateBrandRequest,
   UpdateBrandRequest,
-  GetBrandsRequest,
+  AllowedOrigin,
+  brandService,
 } from "../../services/brandService";
 
 const BrandManagement: React.FC = () => {
+  const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -35,7 +25,12 @@ const BrandManagement: React.FC = () => {
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [viewingBrand, setViewingBrand] = useState<Brand | null>(null);
   const [brandToDelete, setBrandToDelete] = useState<Brand | null>(null);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+    above?: boolean;
+  } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(
     undefined,
@@ -61,39 +56,45 @@ const BrandManagement: React.FC = () => {
   const [showSignatureInput, setShowSignatureInput] = useState(false);
   const [signature, setSignature] = useState("");
 
+  // Allowed origins
+  const [brandForOrigins, setBrandForOrigins] = useState<Brand | null>(null);
+  const [allowedOriginsList, setAllowedOriginsList] = useState<AllowedOrigin[]>([]);
+  const [showAllowedOriginsModal, setShowAllowedOriginsModal] = useState(false);
+  const [showAddOriginModal, setShowAddOriginModal] = useState(false);
+  const [newOriginInput, setNewOriginInput] = useState("");
+  const [loadingOrigins, setLoadingOrigins] = useState(false);
+  const [addingOrigin, setAddingOrigin] = useState(false);
+  const [deletingOriginId, setDeletingOriginId] = useState<number | null>(null);
+
   const loadBrands = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: GetBrandsRequest = {
+      const response = await brandService.getBrands({
         page: pagination.page,
         "per-page": pagination.perPage,
-        ...(searchTerm && { search: searchTerm }),
-        ...(isActiveFilter !== undefined && { is_active: isActiveFilter }),
-      };
-
-      const response = await brandService.getBrands(params);
+        search: searchTerm || undefined,
+        is_active: isActiveFilter,
+      });
 
       if (response.success && response.data) {
-        setBrands(response.data.brands || []);
+        const brandsList = response.data.brands || [];
+        setAllBrands(brandsList);
+        setBrands(brandsList);
         setPagination((prev) => ({
           ...prev,
-          total: response.data!.total_count,
-          totalPages: response.data!.total_pages,
-          currentPage: response.data!.current_page,
-          perPage: response.data!.per_page,
+          total: response.data?.total_count || 0,
+          totalPages: response.data?.total_pages || 1,
+          currentPage: response.data?.current_page || 1,
         }));
       } else {
-        const errorMessage = response.message || "Failed to load brands";
-        setError(errorMessage);
+        setError(response.message || "Failed to load brands");
         setBrands([]);
-        toast.error(errorMessage);
       }
     } catch (err: any) {
-      const errorMessage = err.message || "Failed to load brands";
-      setError(errorMessage);
+      console.error("Error loading brands:", err);
+      setError(err.message || "Failed to load brands");
       setBrands([]);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -102,6 +103,26 @@ const BrandManagement: React.FC = () => {
   useEffect(() => {
     loadBrands();
   }, [loadBrands]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (openDropdownId !== null) {
+        const isDropdownButton = target.closest(".dropdown-container");
+        const isPortalDropdown = target.closest(".action-dropdown-portal");
+        if (!isDropdownButton && !isPortalDropdown) {
+          setOpenDropdownId(null);
+          setDropdownPosition(null);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openDropdownId]);
 
   const handleCreateBrand = async () => {
     if (creating) return;
@@ -113,12 +134,8 @@ const BrandManagement: React.FC = () => {
 
     setCreating(true);
     try {
-      const brandData: CreateBrandRequest = {
-        ...newBrand,
-        ...(showSignatureInput && signature ? { signature } : {}),
-      };
-      const response = await brandService.createBrand(brandData);
-      if (response.success) {
+      const response = await brandService.createBrand(newBrand);
+      if (response.success && response.data) {
         toast.success("Brand created successfully");
         setShowCreateModal(false);
         setNewBrand({
@@ -131,13 +148,13 @@ const BrandManagement: React.FC = () => {
           integration_type: "API",
           is_active: true,
         });
-        setShowSignatureInput(false);
-        setSignature("");
+        // Reload brands list
         await loadBrands();
       } else {
         toast.error(response.message || "Failed to create brand");
       }
     } catch (err: any) {
+      console.error("Error creating brand:", err);
       toast.error(err.message || "Failed to create brand");
     } finally {
       setCreating(false);
@@ -160,20 +177,18 @@ const BrandManagement: React.FC = () => {
         is_active: editingBrand.is_active,
       };
 
-      const response = await brandService.updateBrand(
-        editingBrand.id,
-        updateData,
-      );
-
+      const response = await brandService.updateBrand(editingBrand.id, updateData);
       if (response.success) {
         toast.success("Brand updated successfully");
         setShowEditModal(false);
         setEditingBrand(null);
+        // Reload brands list
         await loadBrands();
       } else {
         toast.error(response.message || "Failed to update brand");
       }
     } catch (err: any) {
+      console.error("Error updating brand:", err);
       toast.error(err.message || "Failed to update brand");
     } finally {
       setUpdating(false);
@@ -195,11 +210,13 @@ const BrandManagement: React.FC = () => {
         toast.success("Brand deleted successfully");
         setShowDeleteModal(false);
         setBrandToDelete(null);
+        // Reload brands list
         await loadBrands();
       } else {
         toast.error(response.message || "Failed to delete brand");
       }
     } catch (err: any) {
+      console.error("Error deleting brand:", err);
       toast.error(err.message || "Failed to delete brand");
     } finally {
       setDeleting(false);
@@ -211,12 +228,88 @@ const BrandManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
-  const toggleDropdown = (id: string) => {
-    setActiveDropdown(activeDropdown === id ? null : id);
+  const toggleDropdown = (id: number) => {
+    setOpenDropdownId(openDropdownId === id ? null : id);
   };
 
   const closeDropdown = () => {
-    setActiveDropdown(null);
+    setOpenDropdownId(null);
+  };
+
+  const fetchAllowedOrigins = useCallback(async (brand: Brand) => {
+    setLoadingOrigins(true);
+    setAllowedOriginsList([]);
+    try {
+      const response = await brandService.getAllowedOrigins(brand.id);
+      if (response.success && response.data?.origins) {
+        setAllowedOriginsList(response.data.origins);
+      } else {
+        setAllowedOriginsList([]);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load allowed origins");
+      setAllowedOriginsList([]);
+    } finally {
+      setLoadingOrigins(false);
+    }
+  }, []);
+
+  const openAllowedOriginsModal = (brand: Brand) => {
+    setBrandForOrigins(brand);
+    setShowAllowedOriginsModal(true);
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+    fetchAllowedOrigins(brand);
+  };
+
+  const openAddOriginModal = (brand: Brand) => {
+    setBrandForOrigins(brand);
+    setNewOriginInput("");
+    setShowAddOriginModal(true);
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+  };
+
+  const handleAddOrigin = async () => {
+    if (!brandForOrigins || !newOriginInput.trim() || addingOrigin) return;
+    const origin = newOriginInput.trim();
+    setAddingOrigin(true);
+    try {
+      const response = await brandService.addAllowedOrigin(brandForOrigins.id, origin);
+      if (response.success) {
+        toast.success("Allowed origin added");
+        setNewOriginInput("");
+        setShowAddOriginModal(false);
+        if (brandForOrigins) {
+          await fetchAllowedOrigins(brandForOrigins);
+          setShowAllowedOriginsModal(true);
+        }
+      } else {
+        toast.error(response.message || "Failed to add origin");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add origin");
+    } finally {
+      setAddingOrigin(false);
+    }
+  };
+
+  const handleDeleteOrigin = async (originId: number) => {
+    if (!brandForOrigins || deletingOriginId !== null) return;
+    setDeletingOriginId(originId);
+    try {
+      const response = await brandService.deleteAllowedOrigin(brandForOrigins.id, originId);
+      if (response.success) {
+        toast.success("Allowed origin removed");
+        setAllowedOriginsList((prev) => prev.filter((o) => o.id !== originId));
+      } else {
+        toast.error(response.message || "Failed to delete origin");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete origin");
+    } finally {
+      setDeletingOriginId(null);
+    }
   };
 
   const handlePageChange = (newPage: number) => {
@@ -227,20 +320,20 @@ const BrandManagement: React.FC = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        activeDropdown &&
+        openDropdownId !== null &&
         !(event.target as Element).closest(".dropdown-container")
       ) {
         closeDropdown();
       }
     };
 
-    if (activeDropdown) {
+    if (openDropdownId !== null) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [activeDropdown]);
+  }, [openDropdownId]);
 
   const activeCount = brands.filter((b) => b.is_active).length;
   const inactiveCount = brands.length - activeCount;
@@ -418,50 +511,136 @@ const BrandManagement: React.FC = () => {
                         {new Date(brand.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="relative dropdown-container flex justify-end">
+                        <div className="relative dropdown-container">
                           <button
-                            onClick={() => toggleDropdown(brand.id)}
-                            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (openDropdownId === brand.id) {
+                                setOpenDropdownId(null);
+                                setDropdownPosition(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const topPosition = rect.bottom + 4;
+                                const leftPosition = rect.left + rect.width / 2;
+                                const viewportHeight = window.innerHeight;
+                                const spaceBelow = viewportHeight - rect.bottom;
+                                let finalTop = topPosition;
+                                if (spaceBelow < 100) {
+                                  finalTop = rect.top - 4;
+                                }
+                                setOpenDropdownId(brand.id);
+                                setDropdownPosition({
+                                  top: finalTop,
+                                  left: leftPosition,
+                                  above: spaceBelow < 100,
+                                });
+                              }
+                            }}
+                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg relative z-10"
                             title="Actions"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
 
-                          {activeDropdown === brand.id && (
-                            <div className="absolute right-0 mt-1 w-48 bg-slate-800/95 border border-slate-700 rounded-xl shadow-xl z-50 py-1 backdrop-blur-sm">
-                              <button
-                                onClick={() => {
-                                  setViewingBrand(brand);
-                                  setShowViewModal(true);
-                                  closeDropdown();
+                          {openDropdownId === brand.id &&
+                            dropdownPosition &&
+                            typeof document !== "undefined" &&
+                            createPortal(
+                              <div
+                                className="fixed rounded-lg z-[99999] min-w-[160px] action-dropdown-portal"
+                                style={{
+                                  top: `${dropdownPosition.top}px`,
+                                  left: `${dropdownPosition.left}px`,
+                                  transform: "translateX(-50%)",
+                                  backgroundColor: "#111827",
+                                  border: "2px solid #4B5563",
+                                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                                  backdropFilter: "none",
+                                  maxHeight: `${Math.min(400, window.innerHeight - dropdownPosition.top - 8)}px`,
+                                  overflowY: "auto",
+                                  scrollbarWidth: "thin",
+                                  scrollbarColor: "#6B7280 #374151",
+                                  position: "fixed",
                                 }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
                               >
-                                <Eye className="h-4 w-4 mr-3" />
-                                View Details
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleEditClick(brand);
-                                  closeDropdown();
-                                }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/80 hover:text-white transition-colors"
-                              >
-                                <Edit className="h-4 w-4 mr-3" />
-                                Edit Brand
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleDeleteBrand(brand);
-                                  closeDropdown();
-                                }}
-                                className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-slate-700/80 hover:text-red-300 transition-colors"
-                              >
-                                <Trash2 className="h-4 w-4 mr-3" />
-                                Delete Brand
-                              </button>
-                            </div>
-                          )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingBrand(brand);
+                                    setShowViewModal(true);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span>View Details</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditClick(brand);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAddOriginModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Globe className="h-4 w-4" />
+                                  <span>Add Allowed Origin</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAllowedOriginsModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <List className="h-4 w-4" />
+                                  <span>View Allowed Origins</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAllowedOriginsModal(brand);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                  <span>Delete Allowed Origin</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBrand(brand);
+                                    setOpenDropdownId(null);
+                                    setDropdownPosition(null);
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>,
+                              document.body,
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -502,6 +681,134 @@ const BrandManagement: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Add Allowed Origin Modal */}
+        {showAddOriginModal && brandForOrigins && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-b from-slate-900/98 to-slate-950/98 border border-slate-800/80 rounded-2xl w-full max-w-md shadow-2xl">
+              <div className="p-6 border-b border-slate-700/80 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">Add Allowed Origin</h2>
+                <button
+                  onClick={() => {
+                    setShowAddOriginModal(false);
+                    setBrandForOrigins(null);
+                    setNewOriginInput("");
+                  }}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-slate-400 text-sm">Brand: <span className="text-white font-medium">{brandForOrigins.name}</span></p>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Origin URL *</label>
+                  <input
+                    type="url"
+                    value={newOriginInput}
+                    onChange={(e) => setNewOriginInput(e.target.value)}
+                    placeholder="https://game.example.com"
+                    className="w-full px-4 py-2.5 bg-slate-950/60 text-white border border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowAddOriginModal(false);
+                      setBrandForOrigins(null);
+                      setNewOriginInput("");
+                    }}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddOrigin}
+                    disabled={!newOriginInput.trim() || addingOrigin}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    {addingOrigin ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                        Adding...
+                      </>
+                    ) : (
+                      "Add Origin"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View / Delete Allowed Origins Modal */}
+        {showAllowedOriginsModal && brandForOrigins && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-b from-slate-900/98 to-slate-950/98 border border-slate-800/80 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-700/80 flex items-center justify-between flex-shrink-0">
+                <h2 className="text-xl font-semibold text-white">Allowed Origins — {brandForOrigins.name}</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowAddOriginModal(true);
+                      setShowAllowedOriginsModal(false);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAllowedOriginsModal(false);
+                      setBrandForOrigins(null);
+                      setAllowedOriginsList([]);
+                    }}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                {loadingOrigins ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500" />
+                  </div>
+                ) : allowedOriginsList.length === 0 ? (
+                  <p className="text-slate-400 text-center py-8">No allowed origins. Add one from the dropdown or click Add above.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {allowedOriginsList.map((o) => (
+                      <li
+                        key={o.id}
+                        className="flex items-center justify-between gap-3 py-2 px-3 bg-slate-800/60 border border-slate-700/80 rounded-xl"
+                      >
+                        <span className="text-white text-sm truncate flex-1">{o.origin}</span>
+                        <span className="text-slate-500 text-xs flex-shrink-0">
+                          {new Date(o.created_at).toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteOrigin(o.id)}
+                          disabled={deletingOriginId === o.id}
+                          className="p-2 text-red-400 hover:bg-red-900/30 rounded-lg disabled:opacity-50 transition-colors"
+                          title="Delete origin"
+                        >
+                          {deletingOriginId === o.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-400" />
+                          ) : (
+                            <Trash className="h-4 w-4" />
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create Modal */}
         {showCreateModal && (

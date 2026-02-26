@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { X, UserPlus } from "lucide-react";
-import { useServices } from "../../contexts/ServicesContext";
 import { brandService, Brand } from "../../services/brandService";
+import { playerManagementService } from "../../services/playerManagementService";
+import { CreatePlayerRequest } from "../../types/playerManagement";
 import toast from "react-hot-toast";
 
 interface AddPlayerModalProps {
@@ -13,7 +14,6 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
   onClose,
   onCreated,
 }) => {
-  const { adminSvc } = useServices();
 
   const [loading, setLoading] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -36,7 +36,7 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
     withdrawal_limit: "",
     withdrawal_all_time_limit: "",
     withdrawal_limit_enabled: false,
-    brand_id: "",
+    brand_id: null,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -62,7 +62,7 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
     fetchBrands();
   }, []);
 
-  const handleChange = (key: string, value: string | boolean) =>
+  const handleChange = (key: string, value: string | boolean | number | null) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const validatePassword = (pwd: string) => {
@@ -117,35 +117,24 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
     if (!validateAll()) return;
     setLoading(true);
     try {
-      const payload = {
+      const payload: CreatePlayerRequest = {
         email: form.email,
         username: form.username,
         password: form.password,
-        first_name: form.first_name,
-        last_name: form.last_name,
-        phone_number: form.phone_number,
+        first_name: form.first_name || null,
+        last_name: form.last_name || null,
+        phone: form.phone_number || null,
         default_currency: form.default_currency,
         date_of_birth: form.date_of_birth,
         country: form.country,
-        state: form.state,
-        city: form.city,
-        street_address: form.street_address,
-        postal_code: form.postal_code,
-        kyc_status: "PENDING",
-        type: "PLAYER",
-        is_test_account: form.is_test_account,
-        withdrawal_limit:
-          form.withdrawal_limit_enabled && form.withdrawal_limit
-            ? parseFloat(form.withdrawal_limit)
-            : undefined,
-        withdrawal_all_time_limit:
-          form.withdrawal_limit_enabled && form.withdrawal_all_time_limit
-            ? parseFloat(form.withdrawal_all_time_limit)
-            : undefined,
-        withdrawal_limit_enabled: form.withdrawal_limit_enabled,
-        brand_id: form.brand_id || undefined,
+        state: form.state || null,
+        street_address: form.street_address || null,
+        postal_code: form.postal_code || null,
+        test_account: form.is_test_account,
+        enable_withdrawal_limit: form.withdrawal_limit_enabled,
+        brand_id: form.brand_id || null,
       };
-      const res = await adminSvc.post("/players/register", payload);
+      const res = await playerManagementService.createPlayer(payload);
       if (res?.success) {
         toast.success("Player created");
         try {
@@ -156,7 +145,7 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
             category: "PlayerManagement",
             severity: "info",
             resource_type: "user",
-            resource_id: (res as any)?.data?.id || "",
+            resource_id: res?.data?.id?.toString() || "",
             description: `Player created: ${form.username}`,
             details: { username: form.username, email: form.email },
           });
@@ -174,9 +163,9 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl my-8 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <UserPlus className="h-5 w-5 text-purple-400" />
             <h3 className="text-white font-semibold">Add Player</h3>
@@ -186,7 +175,7 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">
@@ -285,8 +274,11 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
             <div>
               <label className="block text-sm text-gray-400 mb-1">Brand</label>
               <select
-                value={form.brand_id}
-                onChange={(e) => handleChange("brand_id", e.target.value)}
+                value={form.brand_id || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  handleChange("brand_id", value ? Number(value) : null);
+                }}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
                 disabled={loadingBrands}
               >

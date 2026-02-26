@@ -2,7 +2,7 @@ import { adminSvc } from "./apiService";
 import { ApiResponse } from "./apiService";
 
 export interface Brand {
-  id: string;
+  id: number;
   name: string;
   code: string;
   domain?: string;
@@ -53,6 +53,17 @@ export interface GetBrandsResponse {
   per_page: number;
 }
 
+export interface AllowedOrigin {
+  id: number;
+  brand_id: number;
+  origin: string;
+  created_at: string;
+}
+
+export interface AllowedOriginsListResponse {
+  origins: AllowedOrigin[];
+}
+
 class BrandService {
   private readonly BASE_PATH = "/brands";
 
@@ -80,7 +91,7 @@ class BrandService {
     }
   }
 
-  async getBrandById(id: string): Promise<ApiResponse<Brand>> {
+  async getBrandById(id: number): Promise<ApiResponse<Brand>> {
     try {
       const response = await adminSvc.get<Brand>(`${this.BASE_PATH}/${id}`);
       return response;
@@ -101,7 +112,7 @@ class BrandService {
   }
 
   async updateBrand(
-    id: string,
+    id: number,
     data: UpdateBrandRequest,
   ): Promise<ApiResponse<Brand>> {
     try {
@@ -116,12 +127,57 @@ class BrandService {
     }
   }
 
-  async deleteBrand(id: string): Promise<ApiResponse<void>> {
+  async deleteBrand(id: number): Promise<ApiResponse<void>> {
     try {
       const response = await adminSvc.delete<void>(`${this.BASE_PATH}/${id}`);
       return response;
     } catch (error: any) {
       console.error("Error deleting brand:", error);
+      throw error;
+    }
+  }
+
+  async getAllowedOrigins(
+    brandId: number,
+  ): Promise<ApiResponse<AllowedOriginsListResponse>> {
+    try {
+      const response = await adminSvc.get<AllowedOriginsListResponse>(
+        `${this.BASE_PATH}/${brandId}/allowed-origins`,
+      );
+      return response;
+    } catch (error: any) {
+      console.error("Error fetching allowed origins:", error);
+      throw error;
+    }
+  }
+
+  async addAllowedOrigin(
+    brandId: number,
+    origin: string,
+  ): Promise<ApiResponse<AllowedOrigin>> {
+    try {
+      const response = await adminSvc.post<AllowedOrigin>(
+        `${this.BASE_PATH}/${brandId}/allowed-origins`,
+        { origin },
+      );
+      return response;
+    } catch (error: any) {
+      console.error("Error adding allowed origin:", error);
+      throw error;
+    }
+  }
+
+  async deleteAllowedOrigin(
+    brandId: number,
+    originId: number,
+  ): Promise<ApiResponse<void>> {
+    try {
+      const response = await adminSvc.delete<void>(
+        `${this.BASE_PATH}/${brandId}/allowed-origins/${originId}`,
+      );
+      return response;
+    } catch (error: any) {
+      console.error("Error deleting allowed origin:", error);
       throw error;
     }
   }
